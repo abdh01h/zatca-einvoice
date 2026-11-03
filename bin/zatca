@@ -1,0 +1,240 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Zatca\EInvoice\Crypto\DevCertificate;
+use Zatca\EInvoice\Crypto\InvoiceSigner;
+use Zatca\EInvoice\Crypto\SigningCredentials;
+use Zatca\EInvoice\Domain\Address;
+use Zatca\EInvoice\Domain\Invoice;
+use Zatca\EInvoice\Domain\InvoiceSubtype;
+use Zatca\EInvoice\Domain\InvoiceType;
+use Zatca\EInvoice\Domain\LineItem;
+use Zatca\EInvoice\Domain\Money;
+use Zatca\EInvoice\Domain\Party;
+use Zatca\EInvoice\Domain\Quantity;
+use Zatca\EInvoice\Domain\TaxCategory;
+use Zatca\EInvoice\Domain\VatNumber;
+use Zatca\EInvoice\Qr\Tlv;
+use Zatca\EInvoice\Validation\InvoiceValidator;
+use Zatca\EInvoice\Validation\SchemaValidator;
+
+$autoload = dirname(__DIR__).'/vendor/autoload.php';
+
+if (! is_file($autoload)) {
+    fwrite(STDERR, "Run composer install first.\n");
+    exit(1);
+}
+
+require $autoload;
+
+$command = $argv[1] ?? 'help';
+$options = parseOptions(array_slice($argv, 2));
+
+exit(match ($command) {
+    'demo' => commandDemo($options),
+    'validate' => commandValidate($options),
+    'qr' => commandQr($options),
+    'keygen' => commandKeygen($options),
+    'help', '--help', '-h' => commandHelp(),
+    default => commandUnknown($command),
+});
+
+/** @param list<string> $args @return array<string, string|true> */
+function parseOptions(array $args): array
+{
+    $options = [];
+
+    foreach ($args as $arg) {
+        if (str_starts_with($arg, '--')) {
+            [$key, $value] = array_pad(explode('=', substr($arg, 2), 2), 2, true);
+            $options[$key] = $value;
+        } else {
+            $options['argument'] = $arg;
+        }
+    }
+
+    return $options;
+}
+
+function commandHelp(): int
+{
+    echo <<<'TXT'
+    ZATCA e-invoicing toolkit (PHP)
+
+    Usage:
+      zatca demo [--simplified] [--out=FILE] [--cert=PEM] [--key=PEM]
+          Build, validate and sign a sample invoice. Without --cert/--key a
+          throwaway secp256k1 certificate is generated (testing only).
+
+      zatca validate FILE
+          XSD-validate a UBL 2.1 invoice/credit-note document.
+
+      zatca qr BASE64
+          Decode a ZATCA QR payload into its TLV tags.
+
+      zatca keygen [--out=DIR]
+          Generate an secp256k1 key pair and self-signed certificate.
+
+    TXT;
+
+    return 0;
+}
+
+function commandUnknown(string $command): int
+{
+    fwrite(STDERR, "Unknown command: {$command}. Run `zatca help`.\n");
+
+    return 1;
+}
+
+/** @param array<string, string|true> $options */
+function commandDemo(array $options): int
+{
+    $simplified = isset($options['simplified']);
+    $out = is_string($options['out'] ?? null) ? $options['out'] : 'invoice.xml';
+
+    $invoice = sampleInvoice($simplified);
+
+    $credentials = (is_string($options['cert'] ?? null) && is_string($options['key'] ?? null))
+        ? SigningCredentials::fromFiles($options['cert'], $options['key'])
+        : DevCertificate::credentials();
+
+    $signed = (new InvoiceSigner($credentials))->sign($invoice);
+
+    $rules = InvoiceValidator::withDefaults()->validate($signed->invoice);
+    $schema = (new SchemaValidator())->validate($signed->document);
+
+    $signed->save($out);
+    $signed->saveForDisplay(preg_replace('/\.xml$/', '', $out).'.pretty.xml');
+
+    printf("Document     : %s (%s)\n", $signed->invoice->documentId(), $simplified ? 'simplified' : 'standard');
+    printf("Taxable / VAT: %s / %s SAR\n", $invoice->totals()->taxExclusiveAmount, $invoice->totals()->taxAmount);
+    printf("Total        : %s SAR\n", $invoice->totals()->taxInclusiveAmount);
+    printf("Invoice hash : %s\n", $signed->hash->base64());
+    printf("PIH          : %s\n", $signed->hash->base64OfHex());
+    printf("Rules        : %d error(s), %d warning(s)\n", $rules->errorCount(), $rules->warningCount());
+    printf("XSD          : %s\n", $schema->isValid() ? 'valid UBL 2.1' : 'INVALID');
+    echo "QR tags      :\n";
+
+    foreach ($signed->qrFields() as $tag => $value) {
+        printf("  %d = %s\n", $tag, strlen($value) > 60 ? substr($value, 0, 57).'...' : $value);
+    }
+
+    echo "Written      : {$out} (+ pretty copy)\n";
+
+    return $schema->isValid() && $rules->isValid() ? 0 : 2;
+}
+
+/** @param array<string, string|true> $options */
+function commandValidate(array $options): int
+{
+    $file = is_string($options['argument'] ?? null) ? $options['argument'] : null;
+
+    if ($file === null || ! is_file($file)) {
+        fwrite(STDERR, "Usage: zatca validate FILE\n");
+
+        return 1;
+    }
+
+    $result = (new SchemaValidator())->validateXml((string) file_get_contents($file));
+
+    if ($result->isValid()) {
+        echo basename($file)." is valid UBL 2.1.\n";
+
+        return 0;
+    }
+
+    echo basename($file)." is NOT valid:\n";
+
+    foreach ($result->messages() as $message) {
+        echo '  - '.$message."\n";
+    }
+
+    return 2;
+}
+
+/** @param array<string, string|true> $options */
+function commandQr(array $options): int
+{
+    $payload = is_string($options['argument'] ?? null) ? $options['argument'] : null;
+
+    if ($payload === null) {
+        fwrite(STDERR, "Usage: zatca qr BASE64\n");
+
+        return 1;
+    }
+
+    foreach (Tlv::decode($payload) as $tag => $value) {
+        printf("%d = %s\n", $tag, $value);
+    }
+
+    return 0;
+}
+
+/** @param array<string, string|true> $options */
+function commandKeygen(array $options): int
+{
+    $dir = is_string($options['out'] ?? null) ? $options['out'] : '.';
+
+    if (! is_dir($dir) && ! mkdir($dir, 0o755, true)) {
+        fwrite(STDERR, "Cannot create {$dir}\n");
+
+        return 1;
+    }
+
+    $key = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'secp256k1']);
+
+    if ($key === false) {
+        fwrite(STDERR, "Key generation failed.\n");
+
+        return 1;
+    }
+
+    $csr = openssl_csr_new(['commonName' => 'ZATCA-SANDBOX', 'countryName' => 'SA'], $key, ['digest_alg' => 'sha256']);
+    $certificate = $csr === false ? false : openssl_csr_sign($csr, null, $key, 365, ['digest_alg' => 'sha256']);
+
+    if ($certificate === false) {
+        fwrite(STDERR, "Certificate generation failed.\n");
+
+        return 1;
+    }
+
+    openssl_x509_export_to_file($certificate, $dir.'/certificate.pem');
+    openssl_pkey_export_to_file($key, $dir.'/private-key.pem');
+
+    echo "Wrote {$dir}/certificate.pem and {$dir}/private-key.pem\n";
+    echo "These are self-signed and only useful for local testing; ZATCA issues the real CSID.\n";
+
+    return 0;
+}
+
+function sampleInvoice(bool $simplified): Invoice
+{
+    $seller = new Party(
+        registrationName: 'Acme Widgets Ltd',
+        address: new Address('Prince Sultan Street', '3242', 'Al Olaya', 'Riyadh', '12212', 'SA', '4323'),
+        vatNumber: new VatNumber('311111111101113'),
+        commercialRegistrationNumber: '1010101010',
+    );
+
+    $buyer = $simplified ? null : new Party(
+        registrationName: 'Beta Trading Co',
+        address: new Address('King Fahd Road', '1111', 'Al Malaz', 'Riyadh', '11411', 'SA', '2223'),
+        vatNumber: new VatNumber('300000000000003'),
+    );
+
+    return Invoice::draft(
+        InvoiceType::Invoice,
+        $simplified ? InvoiceSubtype::Simplified : InvoiceSubtype::Standard,
+        new DateTimeImmutable('now', new DateTimeZone('UTC')),
+        $seller,
+        $buyer,
+        [
+            new LineItem('Consulting hours', Quantity::of('12.5', 'HUR'), Money::fromDecimal('250.00')),
+            new LineItem('Software licence', Quantity::of(2, 'PCE'), Money::fromDecimal('499.00'), discount: Money::fromDecimal('50.00'), discountReason: 'Volume discount'),
+            new LineItem('Export handling', Quantity::of(1, 'PCE'), Money::fromDecimal('100.00'), TaxCategory::ZeroRated, exemptionReasonCode: 'VATEX-SA-32'),
+        ],
+    )->withInvoiceNumber($simplified ? 'POS-000123' : 'INV-2026-0001')->withCounterValue(42);
+}
