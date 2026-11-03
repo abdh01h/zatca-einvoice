@@ -34,6 +34,7 @@ final readonly class Invoice
         public int $counterValue = 1,
         public ?string $previousInvoiceHash = null,
         public Currency $currency = Currency::SAR,
+        public ?ExchangeRate $taxExchangeRate = null,
         public array $adjustments = [],
         public ?\DateTimeImmutable $issueTime = null,
         public ?\DateTimeImmutable $supplyDate = null,
@@ -65,6 +66,10 @@ final readonly class Invoice
 
         if ($type->isNote() && $billingReferenceId === null && $billingReferenceNumber === null) {
             throw new InvalidArgumentException(sprintf('%s must reference the invoice it corrects.', $type->label()));
+        }
+
+        if ($taxExchangeRate !== null && $currency->isTaxCurrency()) {
+            throw new InvalidArgumentException('A SAR invoice does not need an exchange rate; the tax currency is already SAR.');
         }
 
         if ($prepaidAmount !== null && $prepaidAmount->currency !== $currency) {
@@ -193,6 +198,7 @@ final readonly class Invoice
             counterValue: $counterValue ?? $this->counterValue,
             previousInvoiceHash: $previousInvoiceHash ?? $this->previousInvoiceHash,
             currency: $this->currency,
+            taxExchangeRate: $this->taxExchangeRate,
             adjustments: $this->adjustments,
             issueTime: $issueTime ?? $this->issueTime,
             supplyDate: $this->supplyDate,

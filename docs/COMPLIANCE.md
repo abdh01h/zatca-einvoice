@@ -19,6 +19,8 @@ do. Written for someone who has to decide whether to put it in front of ZATCA.
 | `xades:CertDigest` interoperates | the digest is recomputed from the certificate inside ZATCA's `Simplified_Invoice.xml` and compared with the digest ZATCA stored |
 | `ds:X509IssuerName` interoperates | the issuer DN is re-rendered from that same certificate and compared with ZATCA's value, including its three `DC=` components |
 | Line discounts reconcile | the discount is declared as a line `cac:AllowanceCharge` and `LineExtensionAmount` equals the sum of line nets (BR‑CO‑10) |
+| The onboarding CSR is well formed | `openssl_csr_get_subject()` and `openssl req` both parse it; subject, secp256k1 curve and the template extension are asserted |
+| Gateway request shapes | asserted through a stub transport: endpoint, headers, OTP, Basic auth, invoice hash/uuid/base64 payload, and parsing of cleared/reported responses |
 
 ## Conventions this library encodes
 
@@ -68,11 +70,9 @@ because that is what ZATCA's validators see in production.
 
 | Gap | Why | Workaround |
 |---|---|---|
-| Onboarding: CSR → compliance CSID → production CSID | requires the taxpayer's Fatoora portal OTP | sign with the CSID you obtain from the portal |
-| Clearance (`/invoices/clearance/single`) and reporting (`/invoices/reporting/single`) | needs a live CSID and network policy decisions | POST `SignedDocument::xml()` yourself |
+| Live gateway calls | no taxpayer OTP/CSID here, so the request shapes come from the published API, not from observation | the client is injectable — swap in your own `HttpClient`, or call the endpoints directly |
 | `SignaturePolicyIdentifier` | absent from ZATCA's sample documents; optional in their schema | add it in a custom `ds:Object` if your counterparty requires it |
-| QR tag 9 (ZATCA stamp) | derived from the CA signature on the CSID certificate, or returned by clearance | pass it to `QrPayload::phaseTwo()` when you have it |
-| SAR tax total for foreign-currency invoices | requires an exchange rate the library does not model | emit a second `cac:TaxTotal` yourself |
+| QR tag 9 (ZATCA stamp) | only ZATCA can produce it; it is not the CA signature on the CSID certificate (checked against the sample bytes) | `ClearanceResult::$qrPayload` returns it after clearance |
 | C14N 1.1 | PHP's DOM ships C14N 1.0 and exclusive C14N only | digests are computed with the same serialiser that emits the document, so signing and verification agree; exotic `xml:base` documents are the theoretical edge case |
 | XSD 1.1 / Schematron rule execution | ZATCA's business rules are Schematron, not XSD | `ZatcaRules` implements 26 of them; see `docs/rules.md` |
 | Full BR‑KSA rule set | their compiled Schematron has hundreds of rules | the subset here covers the rules that break real integrations; unmapped ones are listed as unmapped |

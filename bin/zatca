@@ -16,6 +16,8 @@ use Zatca\EInvoice\Domain\Party;
 use Zatca\EInvoice\Domain\Quantity;
 use Zatca\EInvoice\Domain\TaxCategory;
 use Zatca\EInvoice\Domain\VatNumber;
+use Zatca\EInvoice\Onboarding\CsrBuilder;
+use Zatca\EInvoice\Onboarding\Egs;
 use Zatca\EInvoice\Qr\Tlv;
 use Zatca\EInvoice\Validation\DocumentValidator;
 use Zatca\EInvoice\Validation\InvoiceValidator;
@@ -38,6 +40,7 @@ exit(match ($command) {
     'validate' => commandValidate($options),
     'qr' => commandQr($options),
     'keygen' => commandKeygen($options),
+    'csr' => commandCsr($options),
     'help', '--help', '-h' => commandHelp(),
     default => commandUnknown($command),
 });
@@ -77,6 +80,9 @@ function commandHelp(): int
 
       zatca keygen [--out=DIR]
           Generate an secp256k1 key pair and self-signed certificate.
+
+      zatca csr --manufacturer=X --model=Y --serial=Z --org=NAME --branch=NAME [--out=DIR] [--production]
+          Build the ZATCA onboarding CSR (TST- or PRD- prefixed CN) and its key.
 
     TXT;
 
@@ -228,6 +234,47 @@ function commandKeygen(array $options): int
 
     echo "Wrote {$dir}/certificate.pem and {$dir}/private-key.pem\n";
     echo "These are self-signed and only useful for local testing; ZATCA issues the real CSID.\n";
+
+    return 0;
+}
+
+/** @param array<string, string|true> $options */
+function commandCsr(array $options): int
+{
+    foreach (['manufacturer', 'model', 'serial', 'org', 'branch'] as $required) {
+        if (! is_string($options[$required] ?? null)) {
+            fwrite(STDERR, "Missing --{$required}.\n");
+
+            return 1;
+        }
+    }
+
+    $egs = new Egs(
+        manufacturer: (string) $options['manufacturer'],
+        model: (string) $options['model'],
+        serial: (string) $options['serial'],
+        organizationName: (string) $options['org'],
+        branchName: (string) $options['branch'],
+        commonNamePrefix: isset($options['production']) ? 'PRD' : 'TST',
+    );
+
+    $request = (new CsrBuilder())->build($egs);
+    $directory = is_string($options['out'] ?? null) ? $options['out'] : '.';
+
+    if (! is_dir($directory) && ! mkdir($directory, 0o755, true)) {
+        fwrite(STDERR, "Cannot create {$directory}\n");
+
+        return 1;
+    }
+
+    file_put_contents($directory.'/request.csr', $request->pem);
+    file_put_contents($directory.'/private-key.pem', $request->privateKeyPem);
+    chmod($directory.'/private-key.pem', 0o600);
+
+    echo "CSR written to {$directory}/request.csr\n";
+    echo "Subject: CN={$egs->commonName()}, serialNumber={$egs->serialNumberAttribute()}\n";
+    echo "Send the base64 CSR to POST /compliance with the portal OTP.\n";
+    echo "--transcript--\n".$request->derBase64."\n";
 
     return 0;
 }

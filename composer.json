@@ -3,7 +3,17 @@
     "description": "ZATCA (Fatoora) e-invoicing for PHP: UBL 2.1 generation, Phase-1/Phase-2 QR codes, invoice hashing, XAdES cryptography and business-rule validation.",
     "type": "library",
     "license": "MIT",
-    "keywords": ["zatca", "fatoora", "einvoicing", "e-invoicing", "saudi", "vat", "ubl", "xades", "sar"],
+    "keywords": [
+        "zatca",
+        "fatoora",
+        "einvoicing",
+        "e-invoicing",
+        "saudi",
+        "vat",
+        "ubl",
+        "xades",
+        "sar"
+    ],
     "authors": [
         {
             "name": "Abdullah Aldarkhbani",
@@ -23,7 +33,8 @@
     },
     "suggest": {
         "illuminate/support": "Required only for the optional Laravel service provider (^10 || ^11 || ^12)",
-        "ext-bcmath": "Not required: all money arithmetic is integer-based"
+        "ext-bcmath": "Not required: all money arithmetic is integer-based",
+        "ext-curl": "Required only for the default HTTP transport used by the ZATCA gateway client."
     },
     "autoload": {
         "psr-4": {
@@ -35,7 +46,9 @@
             "Zatca\\EInvoice\\Tests\\": "tests/"
         }
     },
-    "bin": ["bin/zatca"],
+    "bin": [
+        "bin/zatca"
+    ],
     "config": {
         "sort-packages": true,
         "allow-plugins": false
@@ -43,6 +56,9 @@
     "scripts": {
         "test": "phpunit --colors=always",
         "analyse": "phpstan analyse --no-progress",
-        "check": ["@analyse", "@test"]
+        "check": [
+            "@analyse",
+            "@test"
+        ]
     }
 }

@@ -113,11 +113,25 @@ final class InvoiceDocumentBuilder
             $this->allowanceCharge($xml, $xml->root, $adjustment);
         }
 
+        if (! $invoice->currency->isTaxCurrency() && $invoice->taxExchangeRate instanceof \Zatca\EInvoice\Domain\ExchangeRate) {
+            $exchange = $xml->add($xml->root, 'cac:TaxExchangeRate');
+            $xml->add($exchange, 'cbc:SourceCurrencyCode', $invoice->currency->value);
+            $xml->add($exchange, 'cbc:TargetCurrencyCode', 'SAR');
+            $xml->add($exchange, 'cbc:CalculationRate', $invoice->taxExchangeRate->toDecimal());
+        }
+
         $taxTotal = $xml->add($xml->root, 'cac:TaxTotal');
         $xml->money($taxTotal, 'cbc:TaxAmount', $totals->taxAmount);
 
         foreach ($totals->taxSubtotals as $subtotal) {
             $this->taxSubtotal($xml, $taxTotal, $subtotal);
+        }
+
+        // BR-KSA-EN16931-09: a foreign-currency invoice carries a second
+        // TaxTotal in SAR, without tax subtotals.
+        if (! $invoice->currency->isTaxCurrency() && $totals->taxAmountInTaxCurrency instanceof \Zatca\EInvoice\Domain\Money) {
+            $taxTotalInSar = $xml->add($xml->root, 'cac:TaxTotal');
+            $xml->money($taxTotalInSar, 'cbc:TaxAmount', $totals->taxAmountInTaxCurrency);
         }
 
         $monetaryTotal = $xml->add($xml->root, 'cac:LegalMonetaryTotal');

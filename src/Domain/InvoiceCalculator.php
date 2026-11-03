@@ -99,6 +99,9 @@ final class InvoiceCalculator
             taxInclusiveAmount: $taxInclusive,
             prepaidAmount: $prepaid,
             payableAmount: $payable,
+            taxAmountInTaxCurrency: $invoice->currency->isTaxCurrency()
+                ? $tax
+                : $invoice->taxExchangeRate?->convert(new Money($tax->minorUnits, Currency::SAR)),
             taxSubtotals: array_values($groups),
         );
     }

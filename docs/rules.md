@@ -28,7 +28,8 @@ ZATCA's *Electronic Invoice XML Implementation Standard* §13.3 and the compiled
 | `BR-KSA-63` | error | Saudi buyer has a four-digit building number | "If the buyer country code is 'SA', then these fields are mandatory …" |
 | `BR-KSA-66` | error | seller postal code is five digits | "Seller postal code (BT-38) must be 5 digits." |
 | `BR-KSA-83` | warning | Z/E/O lines carry exemption reason text | "… shall have a VAT exemption (or exception) reason text (BT-120) with one of the values from paragraph 11." |
-| `BR-KSA-EN16931-02` | warning | tax amounts are in SAR | "VAT accounting currency code (BT-6) must be SAR." |
+| `BR-KSA-EN16931-02` | warning | document currency is SAR | "VAT accounting currency code (BT-6) must be SAR." |
+| `BR-KSA-EN16931-09` | error | foreign-currency invoices carry the SAR tax total | "Only one tax total without tax subtotals must be provided when tax currency code is provided." |
 | `BR-S-09` | error | each breakdown equals base × rate | "The VAT category tax amount … shall equal the VAT category taxable amount multiplied by the VAT category rate / 100, rounded to two decimals." |
 
 ## Local rules (gap fillers)

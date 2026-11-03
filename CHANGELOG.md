@@ -3,6 +3,31 @@
 All notable changes are documented here. The format follows Keep a Changelog and the project uses
 semantic versioning.
 
+## [0.2.0] — 2026-11-03
+
+### Added
+
+- **Onboarding**: `CsrBuilder` emits ZATCA's CSR profile — secp256k1 key, `TST-`/`PRD-` CN,
+  `serialNumber = 1-manufacturer|2-model|3-serial`, and the `ZATCA-Code-Signing` template extension.
+  The CSR is DER-encoded in-process because OpenSSL types `serialNumber` as PrintableString and
+  rejects the pipe characters the profile requires.
+- **Gateway client**: compliance CSID, production CSID, compliance check, clearance and reporting over
+  an injectable `HttpClient`, returning the cleared/stamped invoice and its QR payload.
+- **Foreign-currency invoices**: `ExchangeRate` value object, `cac:TaxExchangeRate` and the second SAR
+  `cac:TaxTotal` required by BR-KSA-EN16931-09.
+- `Csid` converts ZATCA's base64 token/secret back into working `SigningCredentials`.
+- CLI `csr` command; `Der` minimal ASN.1 encoder.
+
+### Changed
+
+- Gateway parsing is tolerant: unmodelled response fields stay in `ClearanceResult::$payload`.
+
+### Notes
+
+- Gateway request/response shapes follow the published API and are covered by stub-transport tests;
+  they have not been exercised against the live developer portal.
+- QR tag 9 is produced only by ZATCA; `ClearanceResult::$qrPayload` carries it after clearance.
+
 ## [0.1.0] — 2026-11-03
 
 ### Added

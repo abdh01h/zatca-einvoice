@@ -4,7 +4,7 @@ Generate, validate and cryptographically sign Saudi ZATCA (Fatoora) Phase‑2 e�
 UBL 2.1 XML, Phase‑1/Phase‑2 QR codes, invoice hashing, XAdES B‑B signatures and a business‑rule validator.
 
 [![PHP](https://img.shields.io/badge/PHP-8.2%20%7C%208.3%20%7C%208.4-777bb4)](composer.json)
-[![Tests](https://img.shields.io/badge/tests-83%20passing-brightgreen)](tests)
+[![Tests](https://img.shields.io/badge/tests-97%20passing-brightgreen)](tests)
 [![Licence](https://img.shields.io/badge/licence-MIT-blue)](LICENSE)
 
 ---
@@ -101,6 +101,25 @@ $signed->hash->base64();   // base64(raw) — ds:DigestValue, QR tag 6
 $signed->hash->base64OfHex(); // base64(hex) — the PIH for the next invoice
 ```
 
+Onboard and submit:
+
+```php
+use Zatca\EInvoice\Gateway\{Csid, CurlHttpClient, GatewayConfig, ZatcaGateway};
+use Zatca\EInvoice\Onboarding\{CsrBuilder, Egs};
+
+$request = (new CsrBuilder())->build(new Egs('Acme', 'POS-1', '1234567890', 'Acme Widgets Ltd', 'Riyadh'));
+$gateway = new ZatcaGateway(new CurlHttpClient(), GatewayConfig::sandbox());
+
+$compliance = $gateway->requestComplianceCsid($request->derBase64, $portalOtp);
+$production = $gateway->requestProductionCsid($compliance, $compliance->requestId ?? '');
+
+$result = $gateway->clearance($production, $signed);   // standard (B2B)
+$result = $gateway->reporting($production, $signed);   // simplified (B2C)
+
+$result->status;       // CLEARED / REPORTED
+$result->qrPayload;    // the stamped QR from a cleared invoice
+```
+
 Validate before signing:
 
 ```php
@@ -118,6 +137,8 @@ InvoiceValidator::withDefaults()->validate($invoice)->throwIfInvalid();
 ./bin/zatca validate invoice.xml       # XSD check against UBL 2.1
 ./bin/zatca qr "$(cat qr.txt)"         # decode a ZATCA QR payload
 ./bin/zatca keygen --out=/tmp/csid     # secp256k1 key + self-signed cert for local testing
+./bin/zatca csr --manufacturer=Acme --model=POS-1 --serial=1234567890 \
+    --org="Acme Widgets Ltd" --branch=Riyadh --out=/tmp/onboarding
 ```
 
 ## How signing works
@@ -143,7 +164,9 @@ declarations inherited from ancestors are part of the canonical bytes.
 | Signature | Verified with `openssl_verify` over the canonicalised `ds:SignedInfo` |
 | PIH chain | First invoice uses the published `NWZlY2Vi…` constant; chained invoices carry `base64(hex(previous))`, the same encoding as the seed |
 | QR | Phase 1 (tags 1‑5) and Phase 2 (tags 1‑8, optional 9) decoded and asserted in tests |
-| Business rules | 24 rules; see [docs/rules.md](docs/rules.md) |
+| Business rules | 25 rules; see [docs/rules.md](docs/rules.md) |
+| Onboarding CSR | subject, secp256k1 key and template extension asserted; the CSR is accepted by `openssl req` |
+| Gateway requests | request shapes and response parsing tested through a stub transport — **not** against the live portal |
 | Certificate digest | Reproduces the `xades:CertDigest` in ZATCA's own sample byte-for-byte |
 | Issuer name | Reproduces the `ds:X509IssuerName` in ZATCA's own sample (three `DC=` components in RFC 4514 order) |
 | ZATCA API submission | **Not implemented** — this builds documents, it does not clear or report them |
@@ -156,16 +179,17 @@ Known limits, stated plainly:
   canonicalise differently. This is the one place where a ZATCA acceptance test is still worth running.
 - **No `SignaturePolicyIdentifier`.** ZATCA's sample documents omit it; some SDK versions include it.
   It is optional in their schema and not emitted here.
-- **No onboarding (CSR → compliance CSID → production CSID).** ZATCA issues those certificates through
-  the Fatoora portal with an OTP; this package signs with a certificate you already hold.
+- **Gateway calls are unexercised.** The CSR and the four endpoints are implemented and unit‑tested
+  against a stub, but no call has been made to the developer portal: that needs a taxpayer OTP and a
+  CSID. Treat the JSON field names as "per the docs, unverified".
 - **`SignedProperties` is hashed in place.** Inherited namespace declarations are part of the bytes,
   which is what a DOM-based verifier does; a verifier that hashes a detached copy would disagree.
-  A ZATCA sandbox compliance call is the only way to settle which one they recompute.
-- **QR tag 9 is not derived.** ZATCA's simplified samples carry the CA's signature over the stamp in
-  tag 9; this library accepts it as an optional argument (for a cleared document) rather than
-  extracting it from the certificate.
-- **Foreign-currency invoices omit the SAR tax total.** ZATCA wants a second `cac:TaxTotal` in SAR
-  alongside the document-currency one; that needs an exchange rate this library does not model.
+  ZATCA's samples carry placeholder digests here, so neither mode reproduces them; only a sandbox
+  compliance call settles it.
+- **QR tag 9 is not generated locally.** It is ZATCA's stamp over the cleared document, so it only
+  exists after clearance; `ClearanceResult::$qrPayload` returns the stamped payload, and
+  `QrPayload::phaseTwo()` takes it as an optional argument. It is *not* derivable from the CSID
+  certificate — that was checked against the sample bytes and does not hold.
 - **PIH chaining after the first invoice is documented, not sandbox-proven.** The published seed is
   base64 of the hex digest (88 chars); this library keeps that encoding for every link and exposes
   `InvoiceHash::base64()` if your validator turns out to want the 44-character `ds:DigestValue` form.

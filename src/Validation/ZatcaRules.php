@@ -307,6 +307,14 @@ final class ZatcaRules
                     : sprintf('Document currency is %s; ZATCA also requires the tax amounts in SAR.', $invoice->currency->value),
             ),
             new CallableRule(
+                'BR-KSA-EN16931-09',
+                'A foreign-currency invoice also carries the tax total in SAR.',
+                Severity::Error,
+                static fn (Invoice $invoice): ?string => ! $invoice->currency->isTaxCurrency() && $invoice->taxExchangeRate === null
+                    ? sprintf('Document currency is %s, so the SAR tax total (with cac:TaxExchangeRate) is required.', $invoice->currency->value)
+                    : null,
+            ),
+            new CallableRule(
                 'KSA-SIMPLIFIED-BUYER-VAT',
                 'A simplified invoice is a B2C document and should not carry a buyer VAT number.',
                 Severity::Warning,

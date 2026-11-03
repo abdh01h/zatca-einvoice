@@ -19,6 +19,8 @@ final readonly class InvoiceTotals
         public Money $taxInclusiveAmount,
         public Money $prepaidAmount,
         public Money $payableAmount,
+        /** SAR tax total for a foreign-currency invoice (BR-KSA-EN16931-09). */
+        public ?Money $taxAmountInTaxCurrency,
         public array $taxSubtotals,
     ) {
     }

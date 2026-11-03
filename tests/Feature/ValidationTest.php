@@ -91,6 +91,7 @@ final class ValidationTest extends TestCase
             lines: [new LineItem('Export', Quantity::of(1), Money::fromDecimal('10.00', \Zatca\EInvoice\Domain\Currency::USD), TaxCategory::ZeroRated, exemptionReasonCode: 'VATEX-SA-32')],
             invoiceNumber: 'INV-2',
             currency: \Zatca\EInvoice\Domain\Currency::USD,
+            taxExchangeRate: \Zatca\EInvoice\Domain\ExchangeRate::fromDecimal('3.75'),
         );
 
         $result = InvoiceValidator::withDefaults()->validate($invoice);
