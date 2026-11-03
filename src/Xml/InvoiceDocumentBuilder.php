@@ -95,9 +95,18 @@ final class InvoiceDocumentBuilder
             $xml->add($delivery, 'cbc:ActualDeliveryDate', $invoice->deliveryDate->format('Y-m-d'));
         }
 
-        if ($invoice->paymentMeansCode !== null) {
+        if ($invoice->paymentMeansCode !== null || $invoice->instructionNote !== null) {
             $paymentMeans = $xml->add($xml->root, 'cac:PaymentMeans');
-            $xml->add($paymentMeans, 'cbc:PaymentMeansCode', $invoice->paymentMeansCode);
+
+            if ($invoice->paymentMeansCode !== null) {
+                $xml->add($paymentMeans, 'cbc:PaymentMeansCode', $invoice->paymentMeansCode);
+            }
+
+            // BR-KSA-17: the reason for a credit/debit note is KSA-10, which
+            // ZATCA maps to PaymentMeans/InstructionNote (see its own samples).
+            if ($invoice->instructionNote !== null) {
+                $xml->add($paymentMeans, 'cbc:InstructionNote', $invoice->instructionNote);
+            }
         }
 
         foreach ($invoice->adjustments as $adjustment) {
@@ -135,13 +144,16 @@ final class InvoiceDocumentBuilder
         // DocumentReferenceType requires cbc:ID before cbc:UUID. The original
         // invoice number is the natural value; the UUID is the fallback so the
         // document stays schema-valid when only the UUID is known.
+        // ZATCA's own credit-note sample references the original invoice by
+        // number in cbc:ID and carries no UUID, so the UUID is emitted only
+        // when the caller supplied one.
         $xml->add(
             $documentReference,
             'cbc:ID',
             $invoice->billingReferenceNumber ?? $invoice->billingReferenceId ?? 'unknown',
         );
 
-        if ($invoice->billingReferenceId !== null) {
+        if ($invoice->billingReferenceId !== null && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $invoice->billingReferenceId) === 1) {
             $xml->add($documentReference, 'cbc:UUID', $invoice->billingReferenceId);
         }
 
@@ -256,6 +268,13 @@ final class InvoiceDocumentBuilder
         $xml->add($line, 'cbc:ID', (string) $position);
         $xml->add($line, $quantityElement, $item->quantity->toDecimal(), ['unitCode' => $item->quantity->unitCode]);
         $xml->money($line, 'cbc:LineExtensionAmount', $item->taxableAmount());
+
+        if ($item->discount instanceof \Zatca\EInvoice\Domain\Money && ! $item->discount->isZero()) {
+            $allowance = $xml->add($line, 'cac:AllowanceCharge');
+            $xml->add($allowance, 'cbc:ChargeIndicator', 'false');
+            $xml->add($allowance, 'cbc:AllowanceChargeReason', $item->discountReason ?? 'Discount');
+            $xml->money($allowance, 'cbc:Amount', $item->discount);
+        }
 
         $taxTotal = $xml->add($line, 'cac:TaxTotal');
         $xml->money($taxTotal, 'cbc:TaxAmount', $item->taxAmount());

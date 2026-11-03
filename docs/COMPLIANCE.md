@@ -16,6 +16,9 @@ do. Written for someone who has to decide whether to put it in front of ZATCA.
 | QR payloads are well formed | encoded and decoded round‑trip, tag lengths asserted, UTF‑8 (Arabic) values covered |
 | QR encodings match ZATCA's SDK | tags 6‑7 are asserted to be ASCII base64; tag 8 is asserted to be raw DER starting `0x30` and 88 bytes long |
 | Certificate bundles are supported | a two-certificate PEM is signed and both `ds:X509Certificate` elements are asserted |
+| `xades:CertDigest` interoperates | the digest is recomputed from the certificate inside ZATCA's `Simplified_Invoice.xml` and compared with the digest ZATCA stored |
+| `ds:X509IssuerName` interoperates | the issuer DN is re-rendered from that same certificate and compared with ZATCA's value, including its three `DC=` components |
+| Line discounts reconcile | the discount is declared as a line `cac:AllowanceCharge` and `LineExtensionAmount` equals the sum of line nets (BR‑CO‑10) |
 
 ## Conventions this library encodes
 
@@ -34,6 +37,16 @@ do. Written for someone who has to decide whether to put it in front of ZATCA.
 - **Business process identifier.** `cbc:ProfileID` is `reporting:1.0` for standard and simplified
   documents (BR‑KSA‑EN16931‑01); `clearance:1.0` is a common mistake.
 - **QR encodings.** Tags 6 and 7 carry ASCII base64 text; tags 8 and 9 carry raw DER bytes.
+- **SignedProperties canonicalisation.** The digest is taken over the element *in place*, so the
+  namespace declarations it inherits from its ancestors are part of the hashed bytes. Hashing a
+  detached copy of the element (the "linearise the tag, then hash it" reading of the procedure) gives
+  a different digest on the same document. Which of the two ZATCA's validator recomputes is only
+  settled by a sandbox compliance call; the in-place form is used here because it is what a DOM-based
+  verifier does naturally.
+- **Certificate digest.** `sha256` over the certificate's base64 text (whitespace stripped), then
+  base64 of the hex digest. Hashing the DER is the intuitive choice and the wrong one.
+- **Line discounts.** `cbc:LineExtensionAmount` is net of the line allowance, the allowance itself is
+  declared as `cac:AllowanceCharge` on the line, and the document total is the sum of those nets.
 - **Transaction code.** Seven characters, `NNPNESB`: subtype (`01` standard, `02` simplified), then
   third-party, nominal, export, summary, self-billed flags. `InvoiceSubtype::withFlags()` builds it.
 
@@ -58,6 +71,8 @@ because that is what ZATCA's validators see in production.
 | Onboarding: CSR → compliance CSID → production CSID | requires the taxpayer's Fatoora portal OTP | sign with the CSID you obtain from the portal |
 | Clearance (`/invoices/clearance/single`) and reporting (`/invoices/reporting/single`) | needs a live CSID and network policy decisions | POST `SignedDocument::xml()` yourself |
 | `SignaturePolicyIdentifier` | absent from ZATCA's sample documents; optional in their schema | add it in a custom `ds:Object` if your counterparty requires it |
+| QR tag 9 (ZATCA stamp) | derived from the CA signature on the CSID certificate, or returned by clearance | pass it to `QrPayload::phaseTwo()` when you have it |
+| SAR tax total for foreign-currency invoices | requires an exchange rate the library does not model | emit a second `cac:TaxTotal` yourself |
 | C14N 1.1 | PHP's DOM ships C14N 1.0 and exclusive C14N only | digests are computed with the same serialiser that emits the document, so signing and verification agree; exotic `xml:base` documents are the theoretical edge case |
 | XSD 1.1 / Schematron rule execution | ZATCA's business rules are Schematron, not XSD | `ZatcaRules` implements 26 of them; see `docs/rules.md` |
 | Full BR‑KSA rule set | their compiled Schematron has hundreds of rules | the subset here covers the rules that break real integrations; unmapped ones are listed as unmapped |

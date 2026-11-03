@@ -184,31 +184,6 @@ final class ZatcaRules
                 },
             ),
             new CallableRule(
-                'BR-CO-15',
-                'Tax-inclusive total equals tax-exclusive total plus tax.',
-                Severity::Error,
-                static function (Invoice $invoice): ?string {
-                    $totals = InvoiceCalculator::totals($invoice);
-
-                    return $totals->taxExclusiveAmount->plus($totals->taxAmount)->equals($totals->taxInclusiveAmount)
-                        ? null
-                        : 'Totals do not reconcile: tax-exclusive + tax differs from tax-inclusive.';
-                },
-            ),
-            new CallableRule(
-                'BR-CO-16',
-                'Payable amount equals tax-inclusive total minus prepaid amount.',
-                Severity::Error,
-                static function (Invoice $invoice): ?string {
-                    $totals = InvoiceCalculator::totals($invoice);
-                    $expected = $totals->taxInclusiveAmount->minus($totals->prepaidAmount);
-
-                    return $expected->equals($totals->payableAmount)
-                        ? null
-                        : 'Payable amount does not reconcile with tax-inclusive total and prepaid amount.';
-                },
-            ),
-            new CallableRule(
                 'BR-S-09',
                 'Each VAT breakdown equals taxable amount x rate, rounded to two decimals.',
                 Severity::Error,
@@ -265,30 +240,26 @@ final class ZatcaRules
             ),
             new CallableRule(
                 'BR-KSA-17',
-                'Credit and debit notes state the reason they were issued.',
+                'Credit and debit notes state the reason they were issued in PaymentMeans/InstructionNote.',
                 Severity::Error,
-                static fn (Invoice $invoice): ?string => $invoice->type->isNote() && $invoice->note === null
-                    ? 'Credit and debit notes must contain the reason for issuing (cbc:Note).'
+                static fn (Invoice $invoice): ?string => $invoice->type->isNote() && ($invoice->instructionNote === null || trim($invoice->instructionNote) === '')
+                    ? 'Credit and debit notes must carry the reason for issuing (KSA-10) in cac:PaymentMeans/cbc:InstructionNote.'
                     : null,
             ),
             new CallableRule(
                 'BR-KSA-56',
-                'Credit and debit notes reference the original invoice by UUID.',
+                'Credit and debit notes reference the original invoice.',
                 Severity::Error,
                 static function (Invoice $invoice): ?string {
                     if (! $invoice->type->isNote()) {
                         return null;
                     }
 
-                    $reference = $invoice->billingReferenceId;
+                    $reference = $invoice->billingReferenceNumber ?? $invoice->billingReferenceId;
 
-                    if ($reference === null) {
-                        return 'Missing billing reference.';
-                    }
-
-                    return preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $reference) === 1
-                        ? null
-                        : sprintf('Billing reference "%s" is not the UUID of the original invoice.', $reference);
+                    return $reference === null || trim($reference) === ''
+                        ? 'Missing billing reference (BT-25) to the original invoice.'
+                        : null;
                 },
             ),
             new CallableRule(

@@ -15,8 +15,10 @@ semantic versioning.
   `ds:DigestValue` and QR tag 6, `base64(hex)` for the PIH chain).
 - XAdES B‑B enveloped signature over ECDSA‑SHA256/secp256k1, including certificate digest, issuer
   serial, and the UBLExtensions/sac:SignatureInformation wrapper.
-- Business‑rule validator with 26 rules keyed to ZATCA BR‑KSA/BR‑CO/BR‑S ids, plus XSD validation against vendored OASIS UBL 2.1 schemas.
+- Business‑rule validator with 24 rules keyed to ZATCA BR‑KSA/BR‑CO/BR‑S ids, plus XSD validation against vendored OASIS UBL 2.1 schemas.
+- `DocumentValidator` reconciling BR‑CO‑10/13/15/16 inside any UBL invoice, including foreign documents.
 - CLI: `demo`, `validate`, `qr`, `keygen`.
 - Optional Laravel service provider, publishable config and schemas.
-- 69 tests covering the domain model, XML shape, hashing round‑trips, signature verification, tamper
-  detection, QR payload encodings, certificate bundles and all five ZATCA SDK samples.
+- 83 tests covering the domain model, XML shape, hashing round‑trips, signature verification, tamper
+  detection, QR payload encodings, certificate bundles, line-discount arithmetic, byte-level interop
+  with ZATCA's own `CertDigest`/`X509IssuerName`, and all five ZATCA SDK samples.

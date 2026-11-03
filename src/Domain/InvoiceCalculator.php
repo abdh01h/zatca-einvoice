@@ -26,7 +26,9 @@ final class InvoiceCalculator
         $groups = [];
 
         foreach ($invoice->lines as $line) {
-            $lineExtension = $lineExtension->plus($line->extensionAmount());
+            // cbc:LineExtensionAmount on a line is net of the line allowance,
+            // so the document total is the sum of the net amounts (BR-CO-10).
+            $lineExtension = $lineExtension->plus($line->taxableAmount());
             $lineTax = $line->taxAmount();
             $tax = $tax->plus($lineTax);
 

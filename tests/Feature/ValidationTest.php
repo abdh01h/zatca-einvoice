@@ -99,7 +99,7 @@ final class ValidationTest extends TestCase
         self::assertContains('BR-KSA-EN16931-02', array_map(static fn ($v) => $v->ruleId, $result->warnings()));
     }
 
-    public function test_credit_notes_must_reference_the_original_uuid(): void
+    public function test_credit_notes_must_state_a_reason_in_instruction_note(): void
     {
         $invoice = new Invoice(
             type: InvoiceType::CreditNote,
@@ -114,7 +114,28 @@ final class ValidationTest extends TestCase
 
         $errors = array_map(static fn ($v) => $v->ruleId, InvoiceValidator::withDefaults()->validate($invoice)->errors());
 
-        self::assertContains('BR-KSA-56', $errors);
+        self::assertContains('BR-KSA-17', $errors, 'KSA-10 is mapped to PaymentMeans/InstructionNote.');
+    }
+
+    public function test_a_credit_note_with_a_reason_and_reference_passes(): void
+    {
+        $invoice = new Invoice(
+            type: InvoiceType::CreditNote,
+            subtype: InvoiceSubtype::Standard,
+            issueDate: new \DateTimeImmutable('2026-11-04'),
+            seller: InvoiceFactory::seller(),
+            buyer: InvoiceFactory::buyer(),
+            lines: [new LineItem('Refund', Quantity::of(1), Money::fromDecimal('10.00'))],
+            invoiceNumber: 'CN-1',
+            billingReferenceNumber: 'INV-2026-0001',
+            instructionNote: 'CANCELLATION_OR_TERMINATION',
+            note: 'Order cancelled by the customer',
+        );
+
+        $errors = array_map(static fn ($v) => $v->ruleId, InvoiceValidator::withDefaults()->validate($invoice)->errors());
+
+        self::assertNotContains('BR-KSA-17', $errors);
+        self::assertNotContains('BR-KSA-56', $errors);
     }
 
     public function test_a_note_without_a_billing_reference_cannot_be_constructed(): void

@@ -35,6 +35,10 @@ final class InvoiceSigner
     {
         $document ??= $this->builder->build($invoice);
 
+        if ($this->elements($document, '//ext:UBLExtensions') !== [] || $this->elements($document, '//ds:Signature') !== []) {
+            throw new SigningException('This document is already signed; signing it again would duplicate the extension block.');
+        }
+
         $hash = InvoiceHasher::hash($document);
         $signature = $this->createSignature($document);
         $extensions = $this->wrap($document, $signature);

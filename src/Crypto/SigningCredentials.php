@@ -18,8 +18,8 @@ final class SigningCredentials
     private readonly array $certificate;
 
     public function __construct(
-        public readonly string $certificatePem,
-        public readonly string $privateKeyPem,
+        private readonly string $certificatePem,
+        private readonly string $privateKeyPem,
     ) {
         $key = openssl_pkey_get_private($privateKeyPem);
 
@@ -36,6 +36,10 @@ final class SigningCredentials
         }
 
         $this->certificate = $certificate;
+
+        if (! openssl_x509_check_private_key($certificatePem, $key)) {
+            throw new SigningException('The certificate and the private key do not belong together.');
+        }
 
         $details = openssl_pkey_get_details($key);
         $curve = $details['ec']['curve_name'] ?? null;
@@ -102,10 +106,45 @@ final class SigningCredentials
         return $chain;
     }
 
-    /** base64 of the lowercase hex SHA-256 of the DER certificate (ZATCA quirk). */
+    /**
+     * base64 of the lowercase hex SHA-256 of the certificate's base64 text.
+     *
+     * ZATCA hashes the base64 body of the certificate -- not its DER bytes --
+     * and then base64-encodes the hex digest. Verified against the
+     * xades:CertDigest in ZATCA's own Simplified_Invoice.xml, where hashing
+     * the DER produces a different value and hashing the base64 text
+     * reproduces the stored 88-character digest exactly.
+     */
     public function certificateDigest(): string
     {
-        return base64_encode(hash('sha256', $this->certificateDer()));
+        return self::certificateDigestFor($this->certificatePem);
+    }
+
+    /** The digest for any certificate, so callers can verify peers and fixtures. */
+    public static function certificateDigestFor(string $certificatePem): string
+    {
+        if (preg_match('/-----BEGIN CERTIFICATE-----(.+?)-----END CERTIFICATE-----/s', $certificatePem, $matches) !== 1) {
+            throw new SigningException('The certificate PEM is malformed.');
+        }
+
+        $body = preg_replace('/\s+/', '', $matches[1]) ?? '';
+
+        return base64_encode(hash('sha256', $body));
+    }
+
+    public function certificatePem(): string
+    {
+        return $this->certificatePem;
+    }
+
+    /** The base64 body of the first certificate, without PEM armour or whitespace. */
+    public function certificateBase64(): string
+    {
+        if (preg_match('/-----BEGIN CERTIFICATE-----(.+?)-----END CERTIFICATE-----/s', $this->certificatePem, $matches) !== 1) {
+            throw new SigningException('The certificate PEM is malformed.');
+        }
+
+        return preg_replace('/\s+/', '', $matches[1]) ?? '';
     }
 
     public function issuerName(): string
@@ -164,7 +203,13 @@ final class SigningCredentials
             return false;
         }
 
-        return openssl_verify($data, $signature, $this->publicKeyPem(), OPENSSL_ALGO_SHA256) === 1;
+        $certificateKey = openssl_pkey_get_public($this->certificatePem);
+
+        if ($certificateKey === false) {
+            return false;
+        }
+
+        return openssl_verify($data, $signature, $certificateKey, OPENSSL_ALGO_SHA256) === 1;
     }
 
     public function publicKeyPem(): string

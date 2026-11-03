@@ -19,12 +19,15 @@ final class DistinguishedName
     {
         $parts = [];
 
-        foreach (array_reverse($attributes, true) as $key => $values) {
+        // Flatten first, then reverse the whole list. Reversing only the keys
+        // would leave repeated RDNs (the three DC= components of a ZATCA
+        // issuer) in certificate order instead of RFC 4514 order.
+        foreach ($attributes as $key => $values) {
             foreach ((array) $values as $value) {
                 $parts[] = $key.'='.$value;
             }
         }
 
-        return implode(', ', $parts);
+        return implode(', ', array_reverse($parts));
     }
 }

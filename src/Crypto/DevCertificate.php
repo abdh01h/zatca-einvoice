@@ -68,6 +68,8 @@ final class DevCertificate
 
         file_put_contents($directory.'/certificate.pem', $certificatePem);
         file_put_contents($directory.'/private-key.pem', $privateKeyPem);
+        chmod($directory.'/private-key.pem', 0o600);
+        chmod($directory.'/certificate.pem', 0o644);
 
         return new SigningCredentials($certificatePem, $privateKeyPem);
     }

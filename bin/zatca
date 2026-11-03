@@ -17,6 +17,7 @@ use Zatca\EInvoice\Domain\Quantity;
 use Zatca\EInvoice\Domain\TaxCategory;
 use Zatca\EInvoice\Domain\VatNumber;
 use Zatca\EInvoice\Qr\Tlv;
+use Zatca\EInvoice\Validation\DocumentValidator;
 use Zatca\EInvoice\Validation\InvoiceValidator;
 use Zatca\EInvoice\Validation\SchemaValidator;
 
@@ -140,15 +141,29 @@ function commandValidate(array $options): int
 
     $result = (new SchemaValidator())->validateXml((string) file_get_contents($file));
 
-    if ($result->isValid()) {
-        echo basename($file)." is valid UBL 2.1.\n";
+    if (! $result->isValid()) {
+        echo basename($file)." is NOT valid UBL 2.1:\n";
+
+        foreach ($result->messages() as $message) {
+            echo '  - '.$message."\n";
+        }
+
+        return 2;
+    }
+
+    echo basename($file)." is valid UBL 2.1.\n";
+
+    $document = new DOMDocument();
+    $document->loadXML((string) file_get_contents($file));
+    $totals = (new DocumentValidator())->validate($document);
+
+    if ($totals->isValid()) {
+        echo "Totals reconcile (BR-CO-10/13/15/16).\n";
 
         return 0;
     }
 
-    echo basename($file)." is NOT valid:\n";
-
-    foreach ($result->messages() as $message) {
+    foreach ($totals->messages() as $message) {
         echo '  - '.$message."\n";
     }
 

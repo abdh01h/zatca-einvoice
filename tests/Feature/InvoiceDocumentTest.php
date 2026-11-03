@@ -90,6 +90,28 @@ final class InvoiceDocumentTest extends TestCase
         self::assertTrue((new SchemaValidator())->validate($document)->isValid());
     }
 
+    public function test_line_discounts_are_declared_and_reconcile(): void
+    {
+        $invoice = InvoiceFactory::standard();
+        $document = (new InvoiceDocumentBuilder())->build($invoice);
+        $xpath = $this->xpath($document);
+
+        $lineSum = 0;
+        foreach ($xpath->query('//cac:InvoiceLine/cbc:LineExtensionAmount') as $node) {
+            $lineSum += \Zatca\EInvoice\Domain\Money::fromDecimal((string) $node->nodeValue)->minorUnits;
+        }
+
+        $documentTotal = \Zatca\EInvoice\Domain\Money::fromDecimal(
+            (string) $xpath->query('//cac:LegalMonetaryTotal/cbc:LineExtensionAmount')->item(0)?->nodeValue,
+        )->minorUnits;
+
+        self::assertSame($lineSum, $documentTotal, 'BR-CO-10: the total equals the sum of line nets.');
+        self::assertSame(1, $xpath->query('//cac:InvoiceLine/cac:AllowanceCharge')->length, 'The line discount is declared.');
+        self::assertSame('50.00', $xpath->query('//cac:InvoiceLine/cac:AllowanceCharge/cbc:Amount')->item(0)?->nodeValue);
+        self::assertSame('4683.95', $xpath->query('//cac:LegalMonetaryTotal/cbc:PayableAmount')->item(0)?->nodeValue);
+        self::assertSame($invoice->totals()->taxSubtotals[0]->taxableAmount->toDecimal(), $xpath->query('//cac:TaxTotal/cac:TaxSubtotal/cbc:TaxableAmount')->item(0)?->nodeValue);
+    }
+
     public function test_document_level_allowances_reduce_the_taxable_base(): void
     {
         $invoice = InvoiceFactory::standard();
@@ -109,7 +131,7 @@ final class InvoiceDocumentTest extends TestCase
         self::assertSame('100.00', $totals->allowanceTotalAmount->toDecimal());
         self::assertSame('100.00', $xpath->query('//cac:LegalMonetaryTotal/cbc:AllowanceTotalAmount')->item(0)?->nodeValue);
         self::assertSame($totals->taxExclusiveAmount->toDecimal(), $xpath->query('//cac:LegalMonetaryTotal/cbc:TaxExclusiveAmount')->item(0)?->nodeValue);
-        self::assertSame(1, $xpath->query('//cac:AllowanceCharge')->length);
+        self::assertSame(1, $xpath->query('/*/cac:AllowanceCharge')->length, 'Only the document-level allowance lives on the root.');
     }
 
     private function creditNote(): Invoice

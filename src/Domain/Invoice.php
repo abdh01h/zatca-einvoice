@@ -63,7 +63,7 @@ final readonly class Invoice
             throw new InvalidArgumentException('The seller must have a VAT registration number.');
         }
 
-        if ($type->isNote() && $billingReferenceId === null) {
+        if ($type->isNote() && $billingReferenceId === null && $billingReferenceNumber === null) {
             throw new InvalidArgumentException(sprintf('%s must reference the invoice it corrects.', $type->label()));
         }
 
