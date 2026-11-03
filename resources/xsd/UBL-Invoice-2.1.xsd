@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Convenience entry point for xmllint / libxml2 based tooling.
+
+  The canonical, unmodified OASIS schema lives at maindoc/UBL-Invoice-2.1.xsd.
+  This file only re-exports it so that a flat command path works, e.g.
+
+      xmllint (noout + schema options) resources/xsd/UBL-Invoice-2.1.xsd invoice.xml
+
+  Do not add element or type declarations here.
+-->
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+            elementFormDefault="qualified">
+  <xsd:import namespace="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+              schemaLocation="maindoc/UBL-Invoice-2.1.xsd"/>
+</xsd:schema>

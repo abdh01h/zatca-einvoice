@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Convenience entry point for xmllint / libxml2 based tooling.
+
+  The canonical, unmodified OASIS schema lives at maindoc/UBL-CreditNote-2.1.xsd.
+  This file only re-exports it so that a flat command path works, e.g.
+
+      xmllint (noout + schema options) resources/xsd/UBL-CreditNote-2.1.xsd note.xml
+
+  Note: ZATCA's own SDK samples express credit notes as an Invoice root with
+  cbc:InvoiceTypeCode 381 (standard) or 383 (simplified), so
+  UBL-Invoice-2.1.xsd is what validates those samples.
+
+  Do not add element or type declarations here.
+-->
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+            elementFormDefault="qualified">
+  <xsd:import namespace="urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2"
+              schemaLocation="maindoc/UBL-CreditNote-2.1.xsd"/>
+</xsd:schema>
