@@ -193,7 +193,14 @@ function commandKeygen(array $options): int
     }
 
     $csr = openssl_csr_new(['commonName' => 'ZATCA-SANDBOX', 'countryName' => 'SA'], $key, ['digest_alg' => 'sha256']);
-    $certificate = $csr === false ? false : openssl_csr_sign($csr, null, $key, 365, ['digest_alg' => 'sha256']);
+
+    if (! $csr instanceof OpenSSLCertificateSigningRequest) {
+        fwrite(STDERR, "CSR generation failed.\n");
+
+        return 1;
+    }
+
+    $certificate = openssl_csr_sign($csr, null, $key, 365, ['digest_alg' => 'sha256']);
 
     if ($certificate === false) {
         fwrite(STDERR, "Certificate generation failed.\n");

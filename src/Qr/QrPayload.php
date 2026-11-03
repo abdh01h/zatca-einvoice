@@ -33,23 +33,30 @@ final class QrPayload
     }
 
     /**
-     * Phase 2: header plus hash (base64 of the raw digest), signature,
-     * public key, and optionally ZATCA's stamp from a clearance response.
+     * Phase 2 payload.
+     *
+     * Encodings follow what ZATCA's own SDK emits, which is not uniform:
+     * tags 6 and 7 are the *ASCII text* of the base64 strings, while tags 8
+     * and 9 are the *raw DER bytes* of the public key and the stamp signature.
+     *
+     * @param string $signatureBase64 ASCII base64 of ds:SignatureValue (tag 7)
+     * @param string $publicKeyDer    raw DER SubjectPublicKeyInfo (tag 8)
+     * @param string|null $stampDer   raw DER ECDSA stamp from ZATCA (tag 9, optional)
      */
     public static function phaseTwo(
         Invoice $invoice,
         InvoiceHash $hash,
         string $signatureBase64,
-        string $publicKeyBase64,
-        ?string $stampBase64 = null,
+        string $publicKeyDer,
+        ?string $stampDer = null,
     ): string {
         $fields = self::header($invoice);
         $fields[self::TAG_INVOICE_HASH] = $hash->base64();
         $fields[self::TAG_SIGNATURE] = $signatureBase64;
-        $fields[self::TAG_PUBLIC_KEY] = $publicKeyBase64;
+        $fields[self::TAG_PUBLIC_KEY] = $publicKeyDer;
 
-        if ($stampBase64 !== null && $stampBase64 !== '') {
-            $fields[self::TAG_STAMP] = $stampBase64;
+        if ($stampDer !== null && $stampDer !== '') {
+            $fields[self::TAG_STAMP] = $stampDer;
         }
 
         return Tlv::encode($fields);

@@ -40,8 +40,8 @@ final class ValidationTest extends TestCase
 
         $ids = array_map(static fn ($v) => $v->ruleId, InvoiceValidator::withDefaults()->validate($invoice)->errors());
 
-        self::assertContains('KSA-BUYER-REQUIRED-STANDARD', $ids);
-        self::assertContains('KSA-BUYER-VAT-STANDARD', $ids);
+        self::assertContains('BR-KSA-42', $ids);
+        self::assertContains('BR-KSA-14', $ids);
     }
 
     public function test_simplified_invoices_warn_until_they_are_signed(): void
@@ -50,7 +50,7 @@ final class ValidationTest extends TestCase
         $warnings = array_map(static fn ($v) => $v->ruleId, $result->warnings());
 
         self::assertTrue($result->isValid());
-        self::assertContains('KSA-QR', $warnings);
+        self::assertContains('BR-KSA-60', $warnings);
     }
 
     public function test_a_malformed_previous_hash_is_an_error(): void
@@ -58,7 +58,7 @@ final class ValidationTest extends TestCase
         $invoice = InvoiceFactory::standard()->withPreviousInvoiceHash('not-a-hash');
         $errors = array_map(static fn ($v) => $v->ruleId, InvoiceValidator::withDefaults()->validate($invoice)->errors());
 
-        self::assertContains('KSA-PIH-FORMAT', $errors);
+        self::assertContains('BR-KSA-26', $errors);
     }
 
     public function test_a_well_formed_previous_hash_passes(): void
@@ -69,7 +69,7 @@ final class ValidationTest extends TestCase
 
         $errors = array_map(static fn ($v) => $v->ruleId, InvoiceValidator::withDefaults()->validate($invoice)->errors());
 
-        self::assertNotContains('KSA-PIH-FORMAT', $errors);
+        self::assertNotContains('BR-KSA-26', $errors);
     }
 
     public function test_an_invoice_without_a_number_is_an_error(): void
@@ -96,7 +96,7 @@ final class ValidationTest extends TestCase
         $result = InvoiceValidator::withDefaults()->validate($invoice);
 
         self::assertTrue($result->isValid());
-        self::assertContains('KSA-CURRENCY-SAR', array_map(static fn ($v) => $v->ruleId, $result->warnings()));
+        self::assertContains('BR-KSA-EN16931-02', array_map(static fn ($v) => $v->ruleId, $result->warnings()));
     }
 
     public function test_credit_notes_must_reference_the_original_uuid(): void
@@ -114,7 +114,7 @@ final class ValidationTest extends TestCase
 
         $errors = array_map(static fn ($v) => $v->ruleId, InvoiceValidator::withDefaults()->validate($invoice)->errors());
 
-        self::assertContains('KSA-NOTE-REFERENCE', $errors);
+        self::assertContains('BR-KSA-56', $errors);
     }
 
     public function test_a_note_without_a_billing_reference_cannot_be_constructed(): void
@@ -146,6 +146,6 @@ final class ValidationTest extends TestCase
 
         $errors = array_map(static fn ($v) => $v->ruleId, InvoiceValidator::withDefaults()->validate($invoice)->errors());
 
-        self::assertContains('KSA-EXEMPTION-CODE', $errors);
+        self::assertContains('BR-KSA-23', $errors);
     }
 }

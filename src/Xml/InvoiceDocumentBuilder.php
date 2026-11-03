@@ -45,7 +45,9 @@ final class InvoiceDocumentBuilder
 
         $totals = $invoice->totals();
 
-        $xml->add($xml->root, 'cbc:ProfileID', $invoice->isSimplified() ? 'reporting:1.0' : 'clearance:1.0');
+        // BR-KSA-EN16931-01: the business process identifier is reporting:1.0
+        // for standard and simplified documents alike (all ZATCA samples agree).
+        $xml->add($xml->root, 'cbc:ProfileID', 'reporting:1.0');
         $xml->add($xml->root, 'cbc:ID', $invoice->documentId());
         $xml->add($xml->root, 'cbc:UUID', $invoice->uuid->value);
         $xml->add($xml->root, 'cbc:IssueDate', $invoice->issueDate->format('Y-m-d'));
@@ -224,7 +226,7 @@ final class InvoiceDocumentBuilder
         $this->taxCategory($xml, $element, $subtotal->category->value, $subtotal->rateBasisPoints);
     }
 
-    private function taxCategory(XmlBuilder $xml, \DOMElement $parent, string $category, int $rateBasisPoints, ?string $exemptionReasonCode = null, string $elementName = 'cac:TaxCategory'): void
+    private function taxCategory(XmlBuilder $xml, \DOMElement $parent, string $category, int $rateBasisPoints, ?string $exemptionReasonCode = null, string $elementName = 'cac:TaxCategory', ?string $exemptionReasonText = null): void
     {
         $taxCategory = $xml->add($parent, $elementName);
         $xml->add($taxCategory, 'cbc:ID', $category, [
@@ -235,6 +237,10 @@ final class InvoiceDocumentBuilder
 
         if ($exemptionReasonCode !== null) {
             $xml->add($taxCategory, 'cbc:TaxExemptionReasonCode', $exemptionReasonCode);
+        }
+
+        if ($exemptionReasonText !== null) {
+            $xml->add($taxCategory, 'cbc:TaxExemptionReason', $exemptionReasonText);
         }
 
         $scheme = $xml->add($taxCategory, 'cac:TaxScheme');
@@ -270,6 +276,7 @@ final class InvoiceDocumentBuilder
             $item->taxRateBasisPoints(),
             $item->exemptionReasonCode,
             'cac:ClassifiedTaxCategory',
+            $item->exemptionReason,
         );
 
         $price = $xml->add($line, 'cac:Price');

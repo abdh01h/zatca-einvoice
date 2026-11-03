@@ -62,7 +62,44 @@ final class SigningCredentials
 
     public function certificateDer(): string
     {
-        return self::pemBodyToDer($this->certificatePem, 'CERTIFICATE');
+        $chain = $this->certificateChainDer();
+
+        if ($chain === []) {
+            throw new SigningException('The certificate PEM contains no certificate.');
+        }
+
+        return $chain[0];
+    }
+
+    /**
+     * Every certificate in the PEM bundle, leaf first.
+     *
+     * ZATCA's samples carry a single CSID certificate, but the standard allows
+     * (and some issuers expect) the chain to the trust anchor in ds:X509Data.
+     *
+     * @return list<string>
+     */
+    public function certificateChainDer(): array
+    {
+        $count = preg_match_all('/-----BEGIN CERTIFICATE-----(.+?)-----END CERTIFICATE-----/s', $this->certificatePem, $matches);
+
+        if ($count === false || $count === 0) {
+            throw new SigningException('The certificate PEM contains no certificate.');
+        }
+
+        $chain = [];
+
+        foreach ($matches[1] as $body) {
+            $der = base64_decode(preg_replace('/\s+/', '', $body) ?? '', true);
+
+            if ($der === false) {
+                throw new SigningException('A certificate in the PEM bundle is not valid base64.');
+            }
+
+            $chain[] = $der;
+        }
+
+        return $chain;
     }
 
     /** base64 of the lowercase hex SHA-256 of the DER certificate (ZATCA quirk). */

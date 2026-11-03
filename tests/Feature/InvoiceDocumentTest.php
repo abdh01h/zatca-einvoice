@@ -33,7 +33,7 @@ final class InvoiceDocumentTest extends TestCase
 
         $xml = $document->saveXML();
         self::assertIsString($xml);
-        self::assertStringContainsString('<cbc:ProfileID>clearance:1.0</cbc:ProfileID>', $xml);
+        self::assertStringContainsString('<cbc:ProfileID>reporting:1.0</cbc:ProfileID>', $xml);
         self::assertStringContainsString('<cbc:InvoiceTypeCode name="0100000">388</cbc:InvoiceTypeCode>', $xml);
         self::assertStringContainsString('<cbc:DocumentCurrencyCode>SAR</cbc:DocumentCurrencyCode>', $xml);
         self::assertStringContainsString('<cbc:TaxCurrencyCode>SAR</cbc:TaxCurrencyCode>', $xml);

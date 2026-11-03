@@ -7,20 +7,20 @@ namespace Zatca\EInvoice\Validation;
 use Zatca\EInvoice\Crypto\InvoiceHash;
 use Zatca\EInvoice\Domain\Invoice;
 use Zatca\EInvoice\Domain\InvoiceCalculator;
-use Zatca\EInvoice\Domain\InvoiceSubtype;
 use Zatca\EInvoice\Domain\TaxCategory;
 
 /**
- * The ruleset this library enforces before a document is signed.
+ * The ruleset enforced before a document is signed.
  *
- * Design note: anything the domain model already makes unrepresentable (a
- * seller without a VAT number, an empty invoice, a discount larger than its
- * line) is *not* re-checked here. These rules cover what the model cannot
- * know: which fields ZATCA requires for which document type, how the totals
- * must reconcile, and the shape of the values ZATCA parses.
+ * Identifiers are ZATCA's own BR-KSA / BR-CO / BR-S identifiers wherever the
+ * rule maps one-to-one onto a published rule; the few rules that cover gaps in
+ * the published list keep a local `KSA-*` id so integrations can assert on them
+ * without pretending they are something they are not. docs/rules.md carries the
+ * mapping and the quoted rule text.
  *
- * Rule identifiers are local and stable; docs/rules.md maps each one to the
- * corresponding ZATCA BR-KSA rule.
+ * Design note: anything the domain model already makes unrepresentable (no
+ * seller without a VAT number, no empty invoice, no discount larger than its
+ * line) is not re-checked here. These rules cover what the model cannot know.
  */
 final class ZatcaRules
 {
@@ -29,130 +29,204 @@ final class ZatcaRules
     {
         return [
             new CallableRule(
-                'KSA-SELLER-ADDRESS',
-                'The seller needs a structured national address (street, building number, district, city, postal code).',
+                'BR-KSA-09',
+                'Seller address must contain street, building number, district, city, postal code and country code.',
                 Severity::Error,
                 static fn (Invoice $invoice): ?string => $invoice->seller->address === null
                     ? 'Seller postal address is missing; Phase 2 rejects free-text or absent addresses.'
                     : null,
             ),
             new CallableRule(
-                'KSA-SELLER-CRN',
-                'The seller commercial registration number is recommended and expected by most ERP integrations.',
+                'BR-KSA-37',
+                'The seller building number must be four digits.',
+                Severity::Error,
+                static function (Invoice $invoice): ?string {
+                    $building = $invoice->seller->address?->buildingNumber;
+
+                    return $building !== null && preg_match('/^\d{4}$/', $building) !== 1
+                        ? sprintf('Seller building number "%s" is not four digits.', $building)
+                        : null;
+                },
+            ),
+            new CallableRule(
+                'BR-KSA-66',
+                'The seller postal code must be five digits.',
+                Severity::Error,
+                static function (Invoice $invoice): ?string {
+                    $postal = $invoice->seller->address?->postalCode;
+
+                    return $postal !== null && preg_match('/^\d{5}$/', $postal) !== 1
+                        ? sprintf('Seller postal code "%s" is not five digits.', $postal)
+                        : null;
+                },
+            ),
+            new CallableRule(
+                'BR-KSA-08',
+                'The seller is identified by exactly one scheme-coded identifier (CRN in the common case).',
                 Severity::Warning,
                 static fn (Invoice $invoice): ?string => $invoice->seller->commercialRegistrationNumber === null
-                    ? 'Seller has no commercial registration number (CRN).'
+                    ? 'Seller has no commercial registration number (schemeID CRN).'
                     : null,
             ),
             new CallableRule(
-                'KSA-BUYER-REQUIRED-STANDARD',
-                'A standard (B2B) invoice must identify the buyer.',
+                'BR-KSA-42',
+                'A standard tax invoice must name the buyer.',
                 Severity::Error,
                 static fn (Invoice $invoice): ?string => ! $invoice->isSimplified() && $invoice->buyer === null
                     ? 'Standard invoices require a buyer party; use the simplified subtype for walk-in customers.'
                     : null,
             ),
             new CallableRule(
-                'KSA-BUYER-VAT-STANDARD',
-                'A standard (B2B) invoice must carry the buyer VAT registration number.',
+                'BR-KSA-14',
+                'A standard invoice buyer carries a VAT registration number (or another scheme-coded identifier).',
                 Severity::Error,
                 static fn (Invoice $invoice): ?string => ! $invoice->isSimplified() && $invoice->buyer?->vatNumber === null
-                    ? 'Standard invoices require the buyer VAT number (15 digits, starting and ending with 3).'
+                    ? 'Standard invoices require the buyer VAT number: 15 digits, starting and ending with 3.'
                     : null,
             ),
             new CallableRule(
-                'KSA-BUYER-ADDRESS-STANDARD',
-                'Buyers with a Saudi address must supply building number, street, district, city and postal code.',
+                'BR-KSA-10',
+                'A standard invoice buyer has a street, city and country code.',
+                Severity::Error,
+                static fn (Invoice $invoice): ?string => ! $invoice->isSimplified() && $invoice->buyer !== null && $invoice->buyer->address === null
+                    ? 'Buyer postal address is missing; simplified documents are exempt from this rule.'
+                    : null,
+            ),
+            new CallableRule(
+                'BR-KSA-63',
+                'Saudi buyers supply building number, street, district, city and postal code.',
                 Severity::Error,
                 static function (Invoice $invoice): ?string {
-                    if ($invoice->buyer === null || $invoice->buyer->address !== null) {
+                    $address = $invoice->buyer?->address;
+
+                    if ($address === null || $address->countryCode !== 'SA') {
                         return null;
                     }
 
-                    return 'Buyer postal address is missing; ZATCA requires the structured national address for SA buyers.';
+                    return preg_match('/^\d{4}$/', $address->buildingNumber) === 1
+                        ? null
+                        : 'Buyer building number must be four digits for Saudi addresses.';
                 },
             ),
             new CallableRule(
-                'KSA-PAYMENT-MEANS',
-                'Standard invoices carry a payment means code (UN/ECE 4461).',
+                'BR-KSA-16',
+                'Standard invoices carry a payment means code from UNTDID 4461.',
                 Severity::Error,
-                static fn (Invoice $invoice): ?string => ! $invoice->isSimplified() && $invoice->paymentMeansCode === null
-                    ? 'Payment means code is required for standard invoices.'
-                    : null,
+                static function (Invoice $invoice): ?string {
+                    if ($invoice->isSimplified()) {
+                        return null;
+                    }
+
+                    if ($invoice->paymentMeansCode === null) {
+                        return 'Payment means code is required for standard invoices.';
+                    }
+
+                    return preg_match('/^\d{1,2}$/', $invoice->paymentMeansCode) === 1
+                        ? null
+                        : sprintf('Payment means code "%s" is not a UNTDID 4461 code.', $invoice->paymentMeansCode);
+                },
+            ),
+            new CallableRule(
+                'BR-KSA-06',
+                'The invoice transaction code is seven characters: NN (subtype), then third-party, nominal, export, summary and self-billed flags.',
+                Severity::Error,
+                static fn (Invoice $invoice): ?string => preg_match('/^0[12][01]{5}$/', $invoice->typeNameAttribute()) === 1
+                    ? null
+                    : sprintf('Type name "%s" does not follow the NNPNESB structure.', $invoice->typeNameAttribute()),
+            ),
+            new CallableRule(
+                'BR-KSA-07',
+                'Self-billing is not allowed on export invoices.',
+                Severity::Error,
+                static function (Invoice $invoice): ?string {
+                    $name = $invoice->typeNameAttribute();
+
+                    return substr($name, 4, 1) === '1' && substr($name, 6, 1) === '1'
+                        ? 'Type name sets both the export flag and the self-billed flag.'
+                        : null;
+                },
+            ),
+            new CallableRule(
+                'BR-KSA-31',
+                'Simplified documents accept only the third-party, nominal and summary flags.',
+                Severity::Error,
+                static function (Invoice $invoice): ?string {
+                    $name = $invoice->typeNameAttribute();
+
+                    if (substr($name, 1, 1) !== '2') {
+                        return null;
+                    }
+
+                    return substr($name, 4, 1) === '1' || substr($name, 6, 1) === '1'
+                        ? 'Simplified documents must not set the export or self-billed flags.'
+                        : null;
+                },
             ),
             new CallableRule(
                 'KSA-INVOICE-NUMBER',
-                'cbc:ID carries the seller\'s own sequential invoice number.',
+                'cbc:ID carries the seller\'s own sequential document number.',
                 Severity::Error,
                 static fn (Invoice $invoice): ?string => $invoice->invoiceNumber === null || trim($invoice->invoiceNumber) === ''
                     ? 'Invoice number is missing; cbc:ID must be the seller\'s sequential document number.'
                     : null,
             ),
             new CallableRule(
-                'KSA-TYPE-NAME',
-                'cbc:InvoiceTypeCode@name is seven digits: 1 (standard) or 2 (simplified) then ZATCA flags.',
+                'BR-KSA-04',
+                'The issue date may not be in the future.',
                 Severity::Error,
-                static fn (Invoice $invoice): ?string => preg_match('/^0[12][01]{5}$/', $invoice->typeNameAttribute()) === 1
-                    ? null
-                    : sprintf('Type name "%s" is not a seven-digit ZATCA type code.', $invoice->typeNameAttribute()),
-            ),
-            new CallableRule(
-                'KSA-CURRENCY-SAR',
-                'ZATCA tax amounts are expressed in SAR; a foreign document currency needs a SAR tax total as well.',
-                Severity::Warning,
-                static fn (Invoice $invoice): ?string => $invoice->currency->value === 'SAR'
-                    ? null
-                    : sprintf('Document currency is %s; ZATCA also requires the tax amounts in SAR.', $invoice->currency->value),
-            ),
-            new CallableRule(
-                'KSA-ISSUE-DATE',
-                'Issue dates may not be more than five days in the future.',
-                Severity::Warning,
                 static function (Invoice $invoice): ?string {
-                    $limit = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->modify('+5 days');
+                    $today = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d');
+                    $issued = $invoice->issueDate->setTimezone(new \DateTimeZone('UTC'));
 
-                    return $invoice->issueDate > $limit
-                        ? sprintf('Issue date %s is far in the future.', $invoice->issueDate->format('Y-m-d'))
+                    return $issued->format('Y-m-d') > $today
+                        ? sprintf('Issue date %s is in the future.', $issued->format('Y-m-d'))
                         : null;
                 },
             ),
             new CallableRule(
-                'KSA-PREPAID',
-                'The prepaid amount cannot exceed the tax-inclusive total.',
+                'BR-CO-15',
+                'Tax-inclusive total equals tax-exclusive total plus tax.',
                 Severity::Error,
                 static function (Invoice $invoice): ?string {
                     $totals = InvoiceCalculator::totals($invoice);
 
-                    return $totals->prepaidAmount->minorUnits > $totals->taxInclusiveAmount->minorUnits
-                        ? 'Prepaid amount is larger than the tax-inclusive total.'
-                        : null;
+                    return $totals->taxExclusiveAmount->plus($totals->taxAmount)->equals($totals->taxInclusiveAmount)
+                        ? null
+                        : 'Totals do not reconcile: tax-exclusive + tax differs from tax-inclusive.';
                 },
             ),
             new CallableRule(
-                'KSA-TAX-SUBTOTALS',
-                'Tax subtotals must add up to the invoice tax amount.',
+                'BR-CO-16',
+                'Payable amount equals tax-inclusive total minus prepaid amount.',
                 Severity::Error,
                 static function (Invoice $invoice): ?string {
                     $totals = InvoiceCalculator::totals($invoice);
-                    $sum = 0;
+                    $expected = $totals->taxInclusiveAmount->minus($totals->prepaidAmount);
 
-                    foreach ($totals->taxSubtotals as $subtotal) {
-                        $sum += $subtotal->taxAmount->minorUnits;
-                    }
-
-                    return $sum !== $totals->taxAmount->minorUnits
-                        ? sprintf('Tax subtotals sum to %d minor units but the invoice tax is %d.', $sum, $totals->taxAmount->minorUnits)
-                        : null;
+                    return $expected->equals($totals->payableAmount)
+                        ? null
+                        : 'Payable amount does not reconcile with tax-inclusive total and prepaid amount.';
                 },
             ),
             new CallableRule(
-                'KSA-STANDARD-RATE',
-                'The standard category uses the 15% rate unless a legacy rate is set explicitly.',
-                Severity::Warning,
+                'BR-S-09',
+                'Each VAT breakdown equals taxable amount x rate, rounded to two decimals.',
+                Severity::Error,
                 static function (Invoice $invoice): ?string {
-                    foreach ($invoice->lines as $line) {
-                        if ($line->taxCategory === TaxCategory::Standard && $line->taxRateBasisPoints() !== TaxCategory::STANDARD_RATE_BASIS_POINTS) {
-                            return sprintf('Line "%s" is standard-rated at %s%%.', $line->name, $line->taxRateBasisPoints() / 100);
+                    foreach (InvoiceCalculator::totals($invoice)->taxSubtotals as $subtotal) {
+                        $expected = $subtotal->taxableAmount->percentage($subtotal->rateBasisPoints);
+
+                        // one halala of tolerance: tax is rounded per line and then
+                        // summed, which can drift by a halala against a breakdown
+                        // computed from the aggregate base
+                        if (abs($expected->minorUnits - $subtotal->taxAmount->minorUnits) > 1) {
+                            return sprintf(
+                                'VAT breakdown %s/%s%% carries %s tax but %s is expected.',
+                                $subtotal->category->value,
+                                $subtotal->rateBasisPoints / 100,
+                                $subtotal->taxAmount->toDecimal(),
+                                $expected->toDecimal(),
+                            );
                         }
                     }
 
@@ -160,8 +234,8 @@ final class ZatcaRules
                 },
             ),
             new CallableRule(
-                'KSA-EXEMPTION-CODE',
-                'Zero-rated, exempt and out-of-scope lines use a VATEX-SA-* exemption reason code.',
+                'BR-KSA-23',
+                'Zero-rated, exempt and out-of-scope lines carry a VATEX-SA exemption reason code.',
                 Severity::Error,
                 static function (Invoice $invoice): ?string {
                     foreach ($invoice->lines as $line) {
@@ -176,8 +250,30 @@ final class ZatcaRules
                 },
             ),
             new CallableRule(
-                'KSA-NOTE-REFERENCE',
-                'Credit and debit notes reference the UUID of the invoice they correct.',
+                'BR-KSA-83',
+                'Zero-rated, exempt and out-of-scope lines also carry the exemption reason text.',
+                Severity::Warning,
+                static function (Invoice $invoice): ?string {
+                    foreach ($invoice->lines as $line) {
+                        if ($line->taxCategory !== TaxCategory::Standard && ($line->exemptionReason === null || trim($line->exemptionReason) === '')) {
+                            return sprintf('Line "%s" has an exemption code but no reason text.', $line->name);
+                        }
+                    }
+
+                    return null;
+                },
+            ),
+            new CallableRule(
+                'BR-KSA-17',
+                'Credit and debit notes state the reason they were issued.',
+                Severity::Error,
+                static fn (Invoice $invoice): ?string => $invoice->type->isNote() && $invoice->note === null
+                    ? 'Credit and debit notes must contain the reason for issuing (cbc:Note).'
+                    : null,
+            ),
+            new CallableRule(
+                'BR-KSA-56',
+                'Credit and debit notes reference the original invoice by UUID.',
                 Severity::Error,
                 static function (Invoice $invoice): ?string {
                     if (! $invoice->type->isNote()) {
@@ -196,24 +292,8 @@ final class ZatcaRules
                 },
             ),
             new CallableRule(
-                'KSA-NOTE-REASON',
-                'Credit and debit notes explain why they were issued.',
-                Severity::Warning,
-                static fn (Invoice $invoice): ?string => $invoice->type->isNote() && ($invoice->note ?? $invoice->instructionNote) === null
-                    ? 'No reason given for the credit/debit note.'
-                    : null,
-            ),
-            new CallableRule(
-                'KSA-QR',
-                'Simplified invoices carry the Phase 2 QR payload once signed.',
-                Severity::Warning,
-                static fn (Invoice $invoice): ?string => $invoice->isSimplified() && $invoice->qr === null
-                    ? 'QR payload is empty; sign the invoice before handing it to the customer.'
-                    : null,
-            ),
-            new CallableRule(
-                'KSA-PIH-FORMAT',
-                'The previous invoice hash is base64 of the previous 64-character hex digest.',
+                'BR-KSA-26',
+                'The previous invoice hash is base64 of the previous SHA-256 digest, in either accepted encoding.',
                 Severity::Error,
                 static function (Invoice $invoice): ?string {
                     $pih = $invoice->previousInvoiceHash;
@@ -227,47 +307,55 @@ final class ZatcaRules
 
                         return null;
                     } catch (\Throwable) {
-                        return 'Previous invoice hash is not base64 of a hex SHA-256 digest.';
+                        // fall through to the 44-character raw-digest form
+                    }
+
+                    try {
+                        InvoiceHash::fromBase64($pih);
+
+                        return null;
+                    } catch (\Throwable) {
+                        return 'Previous invoice hash is neither base64 of a hex digest (88 chars) nor base64 of a raw digest (44 chars).';
                     }
                 },
             ),
             new CallableRule(
+                'BR-KSA-60',
+                'Simplified documents carry the cryptographic stamp and QR payload once signed.',
+                Severity::Warning,
+                static fn (Invoice $invoice): ?string => $invoice->isSimplified() && $invoice->qr === null
+                    ? 'QR payload is empty; sign the invoice before handing it to the customer.'
+                    : null,
+            ),
+            new CallableRule(
+                'BR-KSA-EN16931-02',
+                'Tax amounts are expressed in SAR.',
+                Severity::Warning,
+                static fn (Invoice $invoice): ?string => $invoice->currency->value === 'SAR'
+                    ? null
+                    : sprintf('Document currency is %s; ZATCA also requires the tax amounts in SAR.', $invoice->currency->value),
+            ),
+            new CallableRule(
                 'KSA-SIMPLIFIED-BUYER-VAT',
-                'A simplified invoice should not carry a buyer VAT number.',
+                'A simplified invoice is a B2C document and should not carry a buyer VAT number.',
                 Severity::Warning,
                 static fn (Invoice $invoice): ?string => $invoice->isSimplified() && $invoice->buyer?->vatNumber !== null
                     ? 'Simplified invoices are B2C; a buyer VAT number suggests this should be a standard invoice.'
                     : null,
             ),
             new CallableRule(
-                'KSA-INVOICE-SUBTYPE-FLAGS',
-                'The subtype prefix must match the invoice subclass in use.',
-                Severity::Error,
-                static fn (Invoice $invoice): ?string => substr($invoice->typeNameAttribute(), 1, 1) === substr($invoice->subtype->value, 1, 1)
-                    ? null
-                    : 'Type name says standard/simplified differently from the invoice subtype (01 = standard, 02 = simplified).',
-            ),
-            new CallableRule(
-                'KSA-ADJUSTMENT-SIGN',
-                'Document-level charges add to the taxable base and allowances subtract from it.',
+                'KSA-ZERO-CHARGE',
+                'Zero-amount document adjustments are rejected because ZATCA treats them as empty elements.',
                 Severity::Warning,
                 static function (Invoice $invoice): ?string {
                     foreach ($invoice->adjustments as $adjustment) {
-                        if ($adjustment->isCharge && $adjustment->amount->isZero()) {
-                            return 'A zero-amount charge is present; ZATCA rejects empty adjustments.';
+                        if ($adjustment->amount->isZero()) {
+                            return 'A zero-amount allowance or charge is present.';
                         }
                     }
 
                     return null;
                 },
-            ),
-            new CallableRule(
-                'KSA-SIMPLIFIED-SUBTYPE',
-                'Simplified invoices must use the 02xxxxx type name.',
-                Severity::Error,
-                static fn (Invoice $invoice): ?string => $invoice->subtype === InvoiceSubtype::Simplified && substr($invoice->typeNameAttribute(), 1, 1) !== '2'
-                    ? 'Simplified invoices use a type name whose second digit is 2 (02xxxxx).'
-                    : null,
             ),
         ];
     }

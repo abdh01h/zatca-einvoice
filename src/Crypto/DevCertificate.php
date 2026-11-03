@@ -40,7 +40,11 @@ final class DevCertificate
             ['digest_alg' => 'sha256'],
         );
 
-        $certificate = $csr === false ? false : openssl_csr_sign($csr, null, $key, 30, ['digest_alg' => 'sha256']);
+        if (! $csr instanceof \OpenSSLCertificateSigningRequest) {
+            throw new SigningException('Could not create a CSR: '.openssl_error_string());
+        }
+
+        $certificate = openssl_csr_sign($csr, null, $key, 30, ['digest_alg' => 'sha256']);
 
         if ($certificate === false) {
             throw new SigningException('Could not self-sign the development certificate: '.openssl_error_string());

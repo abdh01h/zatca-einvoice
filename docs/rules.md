@@ -1,41 +1,61 @@
 # Business rules
 
-`InvoiceValidator::withDefaults()` runs the rules below. Identifiers are local and stable so an
-integration can assert on them in its own tests. The right‑hand column maps to ZATCA's published
-BR‑KSA rules where a one‑to‑one match has been confirmed; blank means "not yet mapped", not "no rule".
+`InvoiceValidator::withDefaults()` runs the rules below. Identifiers are ZATCA's own where the rule
+maps one-to-one onto a published rule (`BR-KSA-*`, `BR-CO-*`, `BR-S-*`); the remaining rules carry a
+local `KSA-*` id and say plainly that they cover a gap in the published list. Quoted text is from
+ZATCA's *Electronic Invoice XML Implementation Standard* §13.3 and the compiled Schematron (SVRL).
 
-| Rule | Severity | Checks | ZATCA BR |
+## ZATCA rules
+
+| Rule | Severity | Checks | ZATCA wording (abridged) |
 |---|---|---|---|
-| `KSA-SELLER-ADDRESS` | error | seller has a structured national address | BR‑KSA‑66 (seller postal code) |
-| `KSA-SELLER-CRN` | warning | seller commercial registration number present | |
-| `KSA-BUYER-REQUIRED-STANDARD` | error | standard invoices identify a buyer | |
-| `KSA-BUYER-VAT-STANDARD` | error | standard invoices carry the buyer VAT number | |
-| `KSA-BUYER-ADDRESS-STANDARD` | error | SA buyers carry the full address | BR‑KSA‑63 |
-| `KSA-PAYMENT-MEANS` | error | standard invoices carry a payment means code | |
-| `KSA-INVOICE-NUMBER` | error | `cbc:ID` is present and non‑empty | |
-| `KSA-TYPE-NAME` | error | seven‑digit type name (`0` + `1`/`2` + five flags) | |
-| `KSA-CURRENCY-SAR` | warning | document currency is SAR, or a SAR tax total is added | |
-| `KSA-ISSUE-DATE` | warning | issue date is not more than five days ahead | |
-| `KSA-PREPAID` | error | prepaid amount ≤ tax‑inclusive total | |
-| `KSA-TAX-SUBTOTALS` | error | tax subtotals sum to the invoice tax | |
-| `KSA-STANDARD-RATE` | warning | standard category is 15% unless explicitly overridden | |
-| `KSA-EXEMPTION-CODE` | error | Z/E/O lines carry a `VATEX-SA-*` reason code | |
-| `KSA-NOTE-REFERENCE` | error | credit/debit notes reference the original UUID | |
-| `KSA-NOTE-REASON` | warning | notes explain why they were issued | |
-| `KSA-QR` | warning | simplified documents carry a QR payload once signed | |
-| `KSA-PIH-FORMAT` | error | previous hash is base64 of a hex digest | |
-| `KSA-SIMPLIFIED-BUYER-VAT` | warning | simplified invoices do not look like B2B documents | |
-| `KSA-INVOICE-SUBTYPE-FLAGS` | error | type name agrees with the subtype | |
-| `KSA-SIMPLIFIED-SUBTYPE` | error | simplified documents use `02xxxxx` | |
-| `KSA-ADJUSTMENT-SIGN` | warning | no zero‑amount document adjustments | |
+| `BR-KSA-04` | error | issue date is not in the future | "The document issue date (BT-2) must be less or equal to the current date." |
+| `BR-KSA-06` | error | transaction code follows `NNPNESB` | "The invoice transaction code (KSA-2) must exist and respect the following structure: NNPNESB" |
+| `BR-KSA-07` | error | export + self-billed flags are not combined | "Self-billing is not allowed … for export invoices." |
+| `BR-KSA-08` | warning | seller carries a scheme-coded identifier (CRN) | "The seller identification (BT-29) must exist only once with one of the scheme ID …" |
+| `BR-KSA-09` | error | seller address is structured | "Seller address must contain street name, building number, postal code, city, District, country code." |
+| `BR-KSA-10` | error | standard-invoice buyer has street, city, country | "Buyer address must contain a street, city, country code. This rule does not apply on the simplified tax invoices …" |
+| `BR-KSA-14` | error | standard-invoice buyer has an identifier | "The buyer identification (BT-46), required only if buyer is not VAT registered …" |
+| `BR-KSA-16` | error | payment means code present and well formed | "Payment means code (BT-81) … must contain one of the values from subset of UNTDID 4461 code list" |
+| `BR-KSA-17` | error | notes state a reason | "Debit and credit note … must contain the reason (KSA-10) for this invoice type issuing." |
+| `BR-KSA-23` | error | Z/E/O lines carry a `VATEX-SA-*` code | "A VAT breakdown … 'Exempt from VAT' shall have a VAT exemption reason code (BT-121)." |
+| `BR-KSA-26` | error | previous hash is a base64 SHA-256 digest | "If the invoice contains the previous invoice hash (KSA-13), this hash must be base64 encoded SHA256" |
+| `BR-KSA-31` | error | simplified documents set only allowed flags | "For simplified tax invoices … only the following are accepted: third party … nominal supply … and summary transactions." |
+| `BR-KSA-37` | error | seller building number is four digits | "The seller address building number must contain 4 digits." |
+| `BR-KSA-42` | error | standard invoice names the buyer | "The buyer name (BT-44) must be present in the tax invoice …" |
+| `BR-KSA-56` | error | notes reference the original UUID | "For credit notes … and debit notes …, the billing reference ID (BT-25) is mandatory." |
+| `BR-KSA-60` | warning | simplified documents carry a QR payload | "Cryptographic stamp (KSA-15) must exist in simplified tax invoices …" |
+| `BR-KSA-63` | error | Saudi buyer has a four-digit building number | "If the buyer country code is 'SA', then these fields are mandatory …" |
+| `BR-KSA-66` | error | seller postal code is five digits | "Seller postal code (BT-38) must be 5 digits." |
+| `BR-KSA-83` | warning | Z/E/O lines carry exemption reason text | "… shall have a VAT exemption (or exception) reason text (BT-120) with one of the values from paragraph 11." |
+| `BR-KSA-EN16931-02` | warning | tax amounts are in SAR | "VAT accounting currency code (BT-6) must be SAR." |
+| `BR-CO-15` | error | inclusive = exclusive + tax | "Invoice total amount with VAT = Invoice total amount without VAT + Invoice total VAT amount." |
+| `BR-CO-16` | error | payable = inclusive − prepaid | "Amount due for payment = Invoice total amount with VAT − Pre-Paid amount + Rounding amount." |
+| `BR-S-09` | error | each breakdown equals base × rate | "The VAT category tax amount … shall equal the VAT category taxable amount multiplied by the VAT category rate / 100, rounded to two decimals." |
+
+## Local rules (gap fillers)
+
+| Rule | Severity | Checks |
+|---|---|---|
+| `KSA-INVOICE-NUMBER` | error | `cbc:ID` carries a non-empty sequential document number |
+| `KSA-SIMPLIFIED-BUYER-VAT` | warning | a simplified (B2C) document does not carry a buyer VAT number |
+| `KSA-ZERO-CHARGE` | warning | no zero-amount document-level allowance or charge |
 
 Rules that the domain model already makes impossible — seller without VAT, empty invoice, discount
-larger than the line, line currency differing from the document currency — are not repeated here.
+larger than its line, line currency differing from the document currency, a note without a billing
+reference — are not repeated here. They throw at construction time instead.
+
+## Tolerance
+
+`BR-S-09` allows one halala of drift per VAT breakdown. Tax is rounded per line and then summed;
+a breakdown recomputed from the aggregate base can therefore differ by a halala on invoices with many
+small lines. ZATCA's own SDK rounds per line, so the tolerance reflects arithmetic reality rather than
+a weaker check.
 
 ## Writing your own
 
 ```php
-use Zatca\EInvoice\Validation\{CallableRule, InvoiceValidator, Severity};
+use Zatca\EInvoice\Validation\{CallableRule, InvoiceValidator, Severity, ZatcaRules};
 
 $validator = new InvoiceValidator([
     ...ZatcaRules::default(),

@@ -102,7 +102,9 @@ final class SigningTest extends TestCase
         self::assertSame($invoice->totals()->taxAmount->toDecimal(), $fields[5]);
         self::assertSame($signed->hash->base64(), $fields[6]);
         self::assertSame($signed->signatureValue, $fields[7]);
-        self::assertSame(base64_encode($credentials->publicKeyDer()), $fields[8]);
+        self::assertSame($credentials->publicKeyDer(), $fields[8], 'Tag 8 is raw DER, not base64.');
+        self::assertStringStartsWith("\x30", $fields[8], 'A DER SEQUENCE starts with 0x30.');
+        self::assertSame(88, strlen($fields[8]));
     }
 
     public function test_phase_one_qr_contains_only_the_five_generation_tags(): void

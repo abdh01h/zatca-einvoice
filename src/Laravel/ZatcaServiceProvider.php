@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zatca\EInvoice\Laravel;
 
+use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
 use Zatca\EInvoice\Crypto\InvoiceSigner;
@@ -23,13 +24,17 @@ final class ZatcaServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__.'/../../config/zatca.php', 'zatca');
 
-        $this->app->singleton(InvoiceDocumentBuilder::class, static fn (Application $app): InvoiceDocumentBuilder => new InvoiceDocumentBuilder(
-            RootElement::from((string) $app['config']->get('zatca.root_element', 'Invoice')),
-        ));
+        $this->app->singleton(InvoiceDocumentBuilder::class, static function (Application $app): InvoiceDocumentBuilder {
+            $config = $app->make(ConfigRepository::class);
+            $root = $config->get('zatca.root_element', 'Invoice');
+
+            return new InvoiceDocumentBuilder(RootElement::from(is_string($root) ? $root : 'Invoice'));
+        });
 
         $this->app->singleton(SigningCredentials::class, static function (Application $app): SigningCredentials {
-            $certificate = $app['config']->get('zatca.certificate_path');
-            $privateKey = $app['config']->get('zatca.private_key_path');
+            $config = $app->make(ConfigRepository::class);
+            $certificate = $config->get('zatca.certificate_path');
+            $privateKey = $config->get('zatca.private_key_path');
 
             if (! is_string($certificate) || ! is_string($privateKey)) {
                 throw new \RuntimeException('Set ZATCA_CERTIFICATE_PATH and ZATCA_PRIVATE_KEY_PATH.');
@@ -48,11 +53,11 @@ final class ZatcaServiceProvider extends ServiceProvider
         }
 
         $this->publishes([
-            __DIR__.'/../../config/zatca.php' => $this->app->configPath('zatca.php'),
+            __DIR__.'/../../config/zatca.php' => $this->app->basePath('config/zatca.php'),
         ], 'zatca-config');
 
         $this->publishes([
-            __DIR__.'/../../resources/xsd' => $this->app->resourcePath('zatca/xsd'),
+            __DIR__.'/../../resources/xsd' => $this->app->basePath('resources/zatca/xsd'),
         ], 'zatca-schemas');
     }
 }

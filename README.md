@@ -4,7 +4,7 @@ Generate, validate and cryptographically sign Saudi ZATCA (Fatoora) Phase‑2 e�
 UBL 2.1 XML, Phase‑1/Phase‑2 QR codes, invoice hashing, XAdES B‑B signatures and a business‑rule validator.
 
 [![PHP](https://img.shields.io/badge/PHP-8.2%20%7C%208.3%20%7C%208.4-777bb4)](composer.json)
-[![Tests](https://img.shields.io/badge/tests-61%20passing-brightgreen)](tests)
+[![Tests](https://img.shields.io/badge/tests-69%20passing-brightgreen)](tests)
 [![Licence](https://img.shields.io/badge/licence-MIT-blue)](LICENSE)
 
 ---
@@ -22,9 +22,14 @@ in a stack trace:
    of the canonical form. A document that validates against the XSD can still fail clearance because
    its hash no longer matches. This library returns the exact signed bytes and keeps an indented copy
    for humans, labelled as not submittable.
-3. **381/383 are `<Invoice>` roots.** ZATCA's own SDK samples ship credit and debit notes as
+3. **The QR code mixes encodings inside one payload.** Tags 6 and 7 are the *ASCII text* of the base64
+   hash and signature; tags 8 and 9 are the *raw DER bytes* of the public key and the stamp. A QR that
+   base64-encodes tag 8 is 132 bytes longer than ZATCA's own output and will not validate.
+4. **381/383 are `<Invoice>` roots.** ZATCA's own SDK samples ship credit and debit notes as
    `<Invoice>` with `cbc:InvoiceTypeCode` 381/383, not as `<CreditNote>`/`<DebitNote>`. Emitting the
    native roots is supported here, but it is not the default.
+5. **`cbc:ProfileID` is `reporting:1.0` for everything.** Not `clearance:1.0` for B2B — rule
+   BR‑KSA‑EN16931‑01 is explicit, and all five SDK samples agree.
 
 This package encodes those rules once, with tests that re‑parse the output and verify it the way ZATCA
 will.
@@ -38,8 +43,8 @@ will.
 - **Phase‑1 QR** — the five TLV tags required at generation time.
 - **Phase‑2 signing** — invoice hash, XAdES B‑B enveloped signature over ECDSA‑SHA256/secp256k1,
   certificate digest, issuer serial, and the nine‑tag QR payload.
-- **Business rules** — a ruleset with stable identifiers, plus XSD validation against the vendored
-  OASIS UBL 2.1 schemas.
+- **Business rules** — 26 rules keyed to ZATCA's own BR‑KSA / BR‑CO / BR‑S identifiers, plus XSD
+  validation against the vendored OASIS UBL 2.1 schemas.
 - **Zero runtime dependencies** — `ext-dom`, `ext-mbstring`, `ext-openssl` only. No BCMath, no GMP.
 
 ## Install
@@ -133,9 +138,9 @@ declarations inherited from ancestors are part of the canonical bytes.
 | UBL 2.1 structure | Validated with the vendored OASIS schemas against all five ZATCA SDK samples and against generated documents |
 | Invoice hash | Round‑trip tested: re‑parse the emitted XML → hash → compare with `ds:DigestValue` |
 | Signature | Verified with `openssl_verify` over the canonicalised `ds:SignedInfo` |
-| PIH chain | First invoice uses the published constant; chained invoices carry `base64(hex(previous))` |
+| PIH chain | First invoice uses the published `NWZlY2Vi…` constant; chained invoices carry `base64(hex(previous))`, the same encoding as the seed |
 | QR | Phase 1 (tags 1‑5) and Phase 2 (tags 1‑8, optional 9) decoded and asserted in tests |
-| Business rules | 18 rules; see [docs/rules.md](docs/rules.md) |
+| Business rules | 26 rules; see [docs/rules.md](docs/rules.md) |
 | ZATCA API submission | **Not implemented** — this builds documents, it does not clear or report them |
 
 Known limits, stated plainly:
@@ -148,6 +153,9 @@ Known limits, stated plainly:
   It is optional in their schema and not emitted here.
 - **No onboarding (CSR → compliance CSID → production CSID).** ZATCA issues those certificates through
   the Fatoora portal with an OTP; this package signs with a certificate you already hold.
+- **PIH chaining after the first invoice is documented, not sandbox-proven.** The published seed is
+  base64 of the hex digest (88 chars); this library keeps that encoding for every link and exposes
+  `InvoiceHash::base64()` if your validator turns out to want the 44-character `ds:DigestValue` form.
 - **Not certified.** Passing `xmllint` and verifying your own signature is necessary, not sufficient.
   Clearance against the ZATCA sandbox is the real gate.
 

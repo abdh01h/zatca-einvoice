@@ -69,7 +69,7 @@ final class InvoiceSigner
             $invoice,
             $hash,
             $signatureValue,
-            base64_encode($this->credentials->publicKeyDer()),
+            $this->credentials->publicKeyDer(),
         );
 
         $this->insertQrReference($document, $qr);
@@ -146,7 +146,9 @@ final class InvoiceSigner
 
         $keyInfo = $ds('KeyInfo');
         $x509Data = $ds('X509Data');
-        $x509Data->appendChild($ds('X509Certificate', base64_encode($this->credentials->certificateDer())));
+        foreach ($this->credentials->certificateChainDer() as $certificateDer) {
+            $x509Data->appendChild($ds('X509Certificate', base64_encode($certificateDer)));
+        }
         $keyInfo->appendChild($x509Data);
         $signature->appendChild($keyInfo);
 
