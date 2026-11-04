@@ -1,6 +1,6 @@
 ---
 name: zatca-einvoice
-description: Work on the ZATCA Phase-2 e-invoicing library: build, sign, validate.
+description: "Use when working on this ZATCA e-invoicing library."
 ---
 
 # ZATCA e-invoicing library — agent working notes
