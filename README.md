@@ -3,6 +3,7 @@
 Generate, validate and cryptographically sign Saudi ZATCA (Fatoora) Phase‑2 e‑invoices in plain PHP:
 UBL 2.1 XML, Phase‑1/Phase‑2 QR codes, invoice hashing, XAdES B‑B signatures and a business‑rule validator.
 
+[![CI](https://github.com/abdh01h/zatca-einvoice/actions/workflows/ci.yml/badge.svg)](https://github.com/abdh01h/zatca-einvoice/actions/workflows/ci.yml)
 [![PHP](https://img.shields.io/badge/PHP-8.2%20%7C%208.3%20%7C%208.4-777bb4)](composer.json)
 [![Tests](https://img.shields.io/badge/tests-97%20passing-brightgreen)](tests)
 [![Licence](https://img.shields.io/badge/licence-MIT-blue)](LICENSE)
