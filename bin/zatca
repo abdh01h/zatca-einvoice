@@ -126,6 +126,13 @@ function commandDemo(array $options): int
     echo "QR tags      :\n";
 
     foreach ($signed->qrFields() as $tag => $value) {
+        // Tags 8 and 9 are raw DER, not text: hex them instead of spraying a
+        // terminal with binary when someone runs the demo.
+        if (preg_match('/[^\x20-\x7E]/', $value) === 1) {
+            printf("  %d = <%d bytes binary> %s...\n", $tag, strlen($value), bin2hex(substr($value, 0, 8)));
+            continue;
+        }
+
         printf("  %d = %s\n", $tag, strlen($value) > 60 ? substr($value, 0, 57).'...' : $value);
     }
 

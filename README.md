@@ -220,6 +220,10 @@ the XSD set if you validate outside the package.
 
 ## Development
 
+Working on this repo with an AI agent? [`AGENTS.md`](AGENTS.md) and
+[`.claude/skills/zatca-einvoice/SKILL.md`](.claude/skills/zatca-einvoice/SKILL.md) carry the invariants,
+the traps that cost a debugging session each, and the verification ladder.
+
 ```bash
 composer install
 composer test      # PHPUnit
